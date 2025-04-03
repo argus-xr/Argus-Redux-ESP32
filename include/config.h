@@ -1,18 +1,18 @@
-#ifndef CONFIG_H
-#define CONFIG_H
+#pragma once
 
-// --- CONFIGURATION ---
-#define WIFI_SSID "your_wifi_ssid"
-#define WIFI_PASS "your_wifi_password"
-#define DEST_IP "192.168.11.122"
-#define DEST_PORT 13337
-#define IMU_ADDR 0x68
-#define MAX_IMU_SAMPLES 16
-#define CAMERA_ENABLED true
-#define CAMERA_TIMEOUT_US 10000
-#define BATTERY_PIN 34
+// --- Network Configuration ---
+#define DEST_PORT 4210
 
-
+// --- Camera Configuration ---
+#define CAMERA_ENABLED 1
+#define CAMERA_TIMEOUT_US 1000000 // 1 second
+#define MAX_CAMERA_TIMEOUTS 10
+#define CAMERA_FRAME_SIZE FRAMESIZE_QVGA // Or FRAMESIZE_UXGA, etc.
 #define CAMERA_MODEL_AI_THINKER
 
-#endif // CONFIG_H
+// --- IMU Configuration ---
+#define MAX_IMU_SAMPLES 16
+
+// --- Battery Configuration ---
+#define BATTERY_PIN 34
+#define BATTERY_CALIBRATION_FACTOR 1.0f // Adjust this value as needed

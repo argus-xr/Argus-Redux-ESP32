@@ -11,120 +11,124 @@
 #include "main.h"
 #include <Preferences.h>
 #include "network.h"
+#include "config.h"
 
 // --- GLOBAL VARIABLES ---
-IMUSample imu_buffer[MAX_IMU_SAMPLES];
-uint8_t imu_index = 0;
+IMUSample imuBuffer[MAX_IMU_SAMPLES];
+uint8_t imuIndex = 0;
 MPU6050 imu;
 
 // --- FUNCTION DEFINITIONS ---
 
 
 void setupIMU() {
-  if (Wire.begin()) {
-    imu.initialize();
-    if (!imu.testConnection()) {
-      Serial.println("MPU6050 connection failed");
+    if (Wire.begin()) {
+        imu.initialize();
+        if (!imu.testConnection()) {
+            Serial.println("MPU6050 connection failed");
+        } else {
+            Serial.println("MPU6050 connected");
+        }
     } else {
-      Serial.println("MPU6050 connected");
+        Serial.println("Wire.begin() failed");
     }
-  } else {
-    Serial.println("Wire.begin() failed");
-  }
 }
 
 uint16_t readBatteryMv() {
-  int raw = analogRead(BATTERY_PIN);
-  float voltage = raw / 4095.0f * 3.3f * 2.0f;
-  return static_cast<uint16_t>(voltage * 1000);
+    int raw = analogRead(BATTERY_PIN);
+    float voltage = raw / 4095.0f * 3.3f * 2.0f * BATTERY_CALIBRATION_FACTOR;
+    return static_cast<uint16_t>(voltage * 1000);
 }
 
 void bufferIMUSample() {
-  if (imu_index >= MAX_IMU_SAMPLES) return; // Buffer full, don't add more
-  int16_t ax, ay, az, gx, gy, gz;
-  imu.getAcceleration(&ax, &ay, &az);
-  imu.getRotation(&gx, &gy, &gz);
+    if (imuIndex >= MAX_IMU_SAMPLES) {
+        return; // Buffer full, don't add more
+    }
+    int16_t ax, ay, az, gx, gy, gz;
+    imu.getAcceleration(&ax, &ay, &az);
+    imu.getRotation(&gx, &gy, &gz);
 
-  IMUSample &sample = imu_buffer[imu_index];
-  sample.timestamp_us = esp_timer_get_time();
-  sample.accel[0] = ax;
-  sample.accel[1] = ay;
-  sample.accel[2] = az;
-  sample.gyro[0] = gx;
-  sample.gyro[1] = gy;
-  sample.gyro[2] = gz;
-  imu_index++;
+    IMUSample &sample = imuBuffer[imuIndex];
+    sample.timestampUs = esp_timer_get_time();
+    sample.accel[0] = ax;
+    sample.accel[1] = ay;
+    sample.accel[2] = az;
+    sample.gyro[0] = gx;
+    sample.gyro[1] = gy;
+    sample.gyro[2] = gz;
+    imuIndex++;
 }
 
 void sendPacket(camera_fb_t *frame) {
-  PacketHeader header;
-  if (frame) {
-    header.camera_timestamp_start = Camera::frame_timestamp_start;
-    header.camera_timestamp_end = Camera::frame_timestamp_end;
-  }
-  else {
-    header.camera_timestamp_start = 0;
-    header.camera_timestamp_end = 0;
-  }
-  header.battery_mv = readBatteryMv();
-  header.imu_count = imu_index;
-  header.image_size = frame ? frame->len : 0;
+    Network::startMessage(Network::MessageType::SENSOR_DATA);
 
-  udp.beginPacket(DEST_IP, DEST_PORT);
-  udp.write((uint8_t*)&header, sizeof(header));
-  udp.write((uint8_t*)imu_buffer, imu_index * sizeof(IMUSample));
-  if (frame) {
-    udp.write(frame->buf, frame->len);
-  }
-  udp.endPacket();
+    PacketHeader header;
+    if (frame) {
+        header.cameraTimestampStart = Camera::frameTimestampStart;
+        header.cameraTimestampEnd = Camera::frameTimestampEnd;
+    }
+    else {
+        header.cameraTimestampStart = 0;
+        header.cameraTimestampEnd = 0;
+    }
+    header.batteryMv = readBatteryMv();
+    header.imuCount = imuIndex;
+    header.imageSize = frame ? frame->len : 0;
 
-  imu_index = 0; // Reset IMU buffer index after sending
-  xSemaphoreGive(Camera::frame_handled); // Signal that the frame has been handled
+    Network::writePayloadChunk((uint8_t*)&header, sizeof(header));
+    Network::writePayloadChunk((uint8_t*)imuBuffer, imuIndex * sizeof(IMUSample));
+    if (frame) {
+        Network::writePayloadChunk(frame->buf, frame->len);
+    }
+    Network::endMessage();
+
+    imuIndex = 0; // Reset IMU buffer index after sending
+    xSemaphoreGive(Camera::frameHandled); // Signal that the frame has been handled
 }
 
 void setup() {
-  WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); // disable brownout detector
-  delay(4000); // allow time for serial output before boot stuff
+    WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); // disable brownout detector
+    vTaskDelay(pdMS_TO_TICKS(4000)); // allow time for serial output before boot stuff
 
-  Serial.begin(115200);
-  Serial.println("HELLO THERE");
+    Serial.begin(115200);
+    Serial.println("HELLO THERE");
 
-  Serial.println("Connecting to WiFi...");
-  connectWiFi();
-  Serial.println("WiFi connected!");
+    Serial.println("Connecting to WiFi...");
+    Network::startNetworkTasks();
+    Serial.println("WiFi connected!");
 
-  /*Serial.println("Setting up IMU...");
-  setupIMU();
-  Serial.println("IMU setup complete.");*/
+    /*Serial.println("Setting up IMU...");
+    setupIMU();
+    Serial.println("IMU setup complete.");*/
 
 #if CAMERA_ENABLED
-  Serial.println("Initializing camera...");
-  Camera::initCamera();
-  Serial.println("Camera initialized!");
+    Serial.println("Initializing camera...");
+    Camera::initCamera();
+    Serial.println("Camera initialized!");
 
-  Serial.println("Starting camera task...");
-  xTaskCreatePinnedToCore(Camera::cameraTask, "Camera Task", 8192, NULL, 2, NULL, 0); // Camera task on core 0, priority 2
-  Serial.println("Camera task started.");
+    Serial.println("Starting camera task...");
+    xTaskCreatePinnedToCore(Camera::cameraTask, "Camera Task", 8192, NULL, 5, NULL, 0); // Camera task on core 0, priority 5
+    Serial.println("Camera task started.");
 
-  Serial.println("Creating camera semaphore...");
-  Camera::frame_ready = xSemaphoreCreateBinary(); // Create the binary semaphore
-  if (Camera::frame_ready == NULL) {
-    Serial.println("Error creating camera semaphore");
-  } else {
-    Serial.println("Camera semaphore created.");
-  }
+    Serial.println("Creating camera semaphore...");
+    Camera::frameReady = xSemaphoreCreateBinary(); // Create the binary semaphore
+    if (Camera::frameReady == NULL) {
+        Serial.println("Error creating camera semaphore");
+    } else {
+        Serial.println("Camera semaphore created.");
+    }
 #endif
 
-  Serial.println("Setup complete.");
+    Serial.println("Setup complete.");
 }
 
 void loop() {
-  /*bufferIMUSample();
-  
-  if (xSemaphoreTake(Camera::frame_ready, 0) == pdTRUE) { // Check if a frame is ready without blocking
-    sendPacket(Camera::captured_frame);
-  }
-  else if (imu_index >= MAX_IMU_SAMPLES) {
-    sendPacket(nullptr);
-  }*/
+    //bufferIMUSample();
+    
+    if (xSemaphoreTake(Camera::frameReady, 0) == pdTRUE) { // Check if a frame is ready without blocking
+        sendPacket(Camera::capturedFrame);
+    }
+    else if (imuIndex >= MAX_IMU_SAMPLES) {
+        sendPacket(nullptr);
+    }
 }

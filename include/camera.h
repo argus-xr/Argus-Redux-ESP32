@@ -11,12 +11,15 @@ namespace Camera {
     void initCamera();
     void cameraTask(void *param);
 
-    extern camera_fb_t* captured_frame;
-    extern uint32_t frame_timestamp_start;
-    extern uint32_t frame_timestamp_end;
+    extern camera_fb_t* capturedFrame;
+    extern uint32_t frameTimestampStart;
+    extern uint32_t frameTimestampEnd;
 
-    extern SemaphoreHandle_t frame_ready;
-    extern SemaphoreHandle_t frame_handled;
+    extern SemaphoreHandle_t frameReady;
+    extern SemaphoreHandle_t frameHandled;
+
+    void setFrameSize(framesize_t frameSize);
+    framesize_t getFrameSize();
 
 } // namespace Camera
 
