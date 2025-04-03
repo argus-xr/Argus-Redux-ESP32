@@ -66,14 +66,16 @@ void sendPacket(camera_fb_t *frame) {
     if (frame) {
         header.cameraTimestampStart = Camera::frameTimestampStart;
         header.cameraTimestampEnd = Camera::frameTimestampEnd;
+        header.imageSize = frame->len;
     }
     else {
         header.cameraTimestampStart = 0;
         header.cameraTimestampEnd = 0;
+        header.imageSize = 0;
     }
+    
     header.batteryMv = readBatteryMv();
     header.imuCount = imuIndex;
-    header.imageSize = frame ? frame->len : 0;
 
     Network::writePayloadChunk((uint8_t*)&header, sizeof(header));
     Network::writePayloadChunk((uint8_t*)imuBuffer, imuIndex * sizeof(IMUSample));
