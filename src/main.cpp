@@ -77,7 +77,7 @@ void sendPacket(camera_fb_t *frame) {
     header.batteryMv = readBatteryMv();
     header.imuCount = imuIndex;
 
-    Network::writePayloadChunk((uint8_t*)&header, sizeof(header));
+    Network::encodeStruct(header);
     Network::writePayloadChunk((uint8_t*)imuBuffer, imuIndex * sizeof(IMUSample));
     if (frame) {
         Network::writePayloadChunk(frame->buf, frame->len);
