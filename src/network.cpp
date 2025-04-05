@@ -39,10 +39,6 @@ namespace Network {
     static size_t decodeBufferSize = 0;
     static size_t decodeIndex = 0;
 
-    // --- Checksum Self-Test Buffer ---
-    static uint8_t testBuffer[MAX_UDP_PACKET_SIZE];
-    static size_t testBufferIndex = 0;
-
     // CRC8 Lookup Table: 0xD5
     static const uint8_t CRC8_TABLE[256] = {
         0x00, 0xD5, 0x7F, 0xAA, 0xFE, 0x2B, 0x81, 0x54,   0x29, 0xFC, 0x56, 0x83, 0xD7, 0x02, 0xA8, 0x7D,
@@ -76,7 +72,6 @@ namespace Network {
         }
 
         messageCrc = 0; // Reset checksum
-        testBufferIndex = 0; // Reset test buffer index
         encodeInt<uint8_t>(static_cast<uint8_t>(type)); // Encode the message type as a VarInt and update the checksum
     }
 
@@ -84,12 +79,7 @@ namespace Network {
         if (!messageInProgress) return;
         for (size_t i = 0; i < length; i++) {
             udp.write(&data[i], 1);
-            updateChecksum(data[i]);
-            // Add to test buffer for checksum self-test
-            if (testBufferIndex < MAX_UDP_PACKET_SIZE) {
-                testBuffer[testBufferIndex] = data[i];
-                testBufferIndex += 1;
-            }
+            updateCrc(data[i]);
         }
     }
 
@@ -97,22 +87,6 @@ namespace Network {
         if (!messageInProgress) return;
         udp.write(&messageCrc, 1);
         udp.endPacket();
-
-        // --- Checksum Self-Test ---
-        uint8_t testCrc = calculateChecksum(testBuffer, testBufferIndex);
-        if (testCrc != messageCrc) {
-            Serial.printf("❌ Checksum Self-Test Failed! Incremental Checksum: 0x%02X, One-Shot Checksum: 0x%02X\n", messageCrc, testCrc);
-            Serial.printf("Test buffer length: %u\n", testBufferIndex);
-        } else {
-            Serial.printf("✅ Checksum Self-Test Passed! Checksum: 0x%02X\n", messageCrc);
-            Serial.printf("Test buffer length: %u\n", testBufferIndex);
-        }
-
-        Serial.print("Buffer for CRC: ");
-        for (size_t i = 0; i < testBufferIndex; ++i)
-            Serial.printf("%02X ", testBuffer[i]);
-        Serial.printf("\nSelf CRC: 0x%02X\n", calculateChecksum(testBuffer, testBufferIndex));
-        Serial.printf("Live CRC: 0x%02X\n", messageCrc);
 
         messageInProgress = false;
         if (udpMutex) xSemaphoreGive(udpMutex);
@@ -284,10 +258,8 @@ namespace Network {
     }
     
     // Modified updateChecksum() for CRC debug output
-    void updateChecksum(uint8_t data) {
-        uint8_t before = messageCrc;
+    void updateCrc(uint8_t data) {
         messageCrc = crc8_update(messageCrc, data);
-        Serial.printf("CRC: input=0x%02X, before=0x%02X, after=0x%02X\n", data, before, messageCrc);
     }
 
     void encodeVarInt(uint32_t value) {

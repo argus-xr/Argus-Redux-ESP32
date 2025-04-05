@@ -37,7 +37,7 @@ namespace Network {
     // --- Encoding helpers ---
     uint8_t crc8_update(uint8_t crc, uint8_t data);
     uint8_t calculateChecksum(const uint8_t* data, size_t len);
-    void updateChecksum(uint8_t data);
+    void updateCrc(uint8_t data);
     void encodeVarInt(uint32_t value);
     bool decodeVarInt(WiFiUDP& stream, uint32_t& outVal);
 
