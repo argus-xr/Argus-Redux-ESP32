@@ -1,6 +1,7 @@
 #pragma once
 #include <Arduino.h>
 #include <WiFiUdp.h>
+#include <atomic> // Include for atomic types
 
 namespace Network {
 
@@ -17,12 +18,12 @@ namespace Network {
 		UNKNOWN			= 0x00,
 		DISCOVERY		= 0x01,
 		HELLO			= 0x02,
-		HEARTBEAT		= 0x02,
-        SETUP_CONFIG    = 0x03,
-        SENSOR_DATA     = 0x04,
+		HEARTBEAT		= 0x03,
+        SETUP_CONFIG    = 0x04,
+        SENSOR_DATA     = 0x05,
     };
 
-    extern bool isHostDiscovered;
+    extern std::atomic<bool> isHostDiscovered; // Make it atomic
     extern IPAddress hostIP;
 
     void startNetworkTasks();
@@ -39,7 +40,7 @@ namespace Network {
     uint8_t calculateChecksum(const uint8_t* data, size_t len);
     void updateCrc(uint8_t data);
     void encodeVarInt(uint32_t value);
-    bool decodeVarInt(WiFiUDP& stream, uint32_t& outVal);
+    bool decodeVarInt(uint32_t& outVal);
 
     template <typename T>
     void encodeInt(T value);

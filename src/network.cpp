@@ -4,6 +4,7 @@
 #include <WiFiManager.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#include <atomic> // Include for atomic types
 #include "network.h"
 #include "config.h"
 #include "main.h"
@@ -14,7 +15,7 @@ namespace Network {
     const int UDP_PORT = 4210;
     const char* DISCOVERY_MSG = "ARGUS_DISCOVERY";
     const char* REPLY_MSG = "ARGUS_REPLY";
-    const unsigned long HOST_TIMEOUT_MS = 5000;
+    const unsigned long HOST_TIMEOUT_MS = 60000;
     const unsigned long HEARTBEAT_INTERVAL_MS = 2000;
     const unsigned long DISCOVERY_INTERVAL_MS = 1000;
     const int MAX_UDP_PACKET_SIZE = 512;
@@ -22,11 +23,11 @@ namespace Network {
 
     WiFiUDP udp;
     IPAddress hostIP;
-    bool isHostDiscovered = false;
+    std::atomic<bool> isHostDiscovered{false}; // Initialize as atomic and false
 
     static unsigned long lastHostPacketTime = 0;
     static unsigned long lastHeartbeatTime = 0;
-    static unsigned long lastDiscoveryTime = 0;
+    //static unsigned long lastDiscoveryTime = 0; // Removed
 
     static bool messageInProgress = false;
     static uint8_t messageCrc = 0;
@@ -98,11 +99,11 @@ namespace Network {
         decodeIndex = 0;
 
         switch (type) {
-            case MessageType::DISCOVERY:
-                Serial.print("📡 Discovery message received from: ");
+            case MessageType::HELLO:
+                Serial.print("📡 Hello message received from: ");
                 Serial.println(remoteIP);
-                char discoveryString[128];
-                if (!isHostDiscovered && decodeString(discoveryString, sizeof(discoveryString)) && strcmp(discoveryString, REPLY_MSG) == 0) {
+                if (!isHostDiscovered) {
+                    Serial.print("📡 Hello message accepted!");
                     hostIP = remoteIP;
                     isHostDiscovered = true;
                     lastHostPacketTime = millis();
@@ -124,10 +125,6 @@ namespace Network {
                     Serial.println("Failed to decode config string.");
                 }
                 break;
-            case MessageType::SENSOR_DATA:
-                Serial.println("📦 Sensor data received");
-                // Handle sensor data here
-                break;
             default:
                 Serial.printf("📦 Unknown message type: %u, %u bytes\n", static_cast<uint32_t>(type), length);
                 break;
@@ -146,14 +143,13 @@ namespace Network {
 
     void hostDiscoveryTask(void* pvParams) {
         while (true) {
-            if (!isHostDiscovered && millis() - lastDiscoveryTime > DISCOVERY_INTERVAL_MS) {
+            if (!isHostDiscovered) {
                 Serial.println("🔍 Sending discovery message");
                 startMessage(MessageType::DISCOVERY);
                 encodeString(DISCOVERY_MSG);
                 endMessage();
-                lastDiscoveryTime = millis();
             }
-            vTaskDelay(pdMS_TO_TICKS(50));
+            vTaskDelay(pdMS_TO_TICKS(DISCOVERY_INTERVAL_MS)); // Wait for the interval
         }
     }
 
@@ -181,15 +177,20 @@ namespace Network {
                     checksumErrorCount = 0;
                 }
 
-                WiFiUDP inStream = udp;
                 uint32_t typeRaw = 0;
-                if (!decodeVarInt(inStream, typeRaw)) continue;
+                decodeBuffer = packet;
+                decodeBufferSize = n - 1; // Exclude checksum byte
+                decodeIndex = 0;
+                if (!decodeVarInt(typeRaw)) continue;
+                
                 MessageType type = static_cast<MessageType>(typeRaw);
 
-                size_t payloadLen = inStream.available();
+                size_t payloadLen = decodeBufferSize - decodeIndex;
                 uint8_t* payload = (payloadLen > 0) ? (uint8_t*)malloc(payloadLen) : nullptr;
 
-                if (payload) inStream.read(payload, payloadLen);
+                if (payload) {
+                    memcpy(payload, decodeBuffer + decodeIndex, payloadLen);
+                }
 
                 lastHostPacketTime = millis();
                 handleMessage(type, payload, payloadLen, udp.remoteIP());
@@ -198,7 +199,7 @@ namespace Network {
 
             if (isHostDiscovered && millis() - lastHostPacketTime > HOST_TIMEOUT_MS) {
                 Serial.println("⚠️ Host timeout — rediscovering");
-                isHostDiscovered = false;
+                isHostDiscovered = false; // Atomic write
             }
 
             if (isHostDiscovered && millis() - lastHeartbeatTime > HEARTBEAT_INTERVAL_MS) {
@@ -257,7 +258,6 @@ namespace Network {
         return crc;
     }
     
-    // Modified updateChecksum() for CRC debug output
     void updateCrc(uint8_t data) {
         messageCrc = crc8_update(messageCrc, data);
     }
@@ -271,12 +271,13 @@ namespace Network {
         } while (value);
     }
 
-    bool decodeVarInt(WiFiUDP& stream, uint32_t& outVal) {
+    bool decodeVarInt(uint32_t& outVal) {
         outVal = 0;
         uint8_t byte;
         int shift = 0;
         for (int i = 0; i < 5; ++i) {
-            if (stream.read(&byte, 1) != 1) return false;
+            if (decodeIndex >= decodeBufferSize) return false;
+            byte = decodeBuffer[decodeIndex++];
             outVal |= (uint32_t)(byte & 0x7F) << shift;
             if (!(byte & 0x80)) return true;
             shift += 7;

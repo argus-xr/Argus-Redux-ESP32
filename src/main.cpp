@@ -22,7 +22,7 @@ MPU6050 imu;
 
 
 void setupIMU() {
-    if (Wire.begin()) {
+    if (Wire.begin(GPIO_NUM_15, GPIO_NUM_13)) {
         imu.initialize();
         if (!imu.testConnection()) {
             Serial.println("MPU6050 connection failed");
@@ -99,9 +99,9 @@ void setup() {
     Network::startNetworkTasks();
     Serial.println("WiFi connected!");
 
-    /*Serial.println("Setting up IMU...");
+    Serial.println("Setting up IMU...");
     setupIMU();
-    Serial.println("IMU setup complete.");*/
+    Serial.println("IMU setup complete.");
 
 /*#if CAMERA_ENABLED
     Serial.println("Initializing camera...");
