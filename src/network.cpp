@@ -80,7 +80,8 @@ namespace Network {
             case MessageType::DISCOVERY:
                 Serial.print("📡 Discovery message received from: ");
                 Serial.println(remoteIP);
-                if (!isHostDiscovered && strcmp((const char*)payload, REPLY_MSG) == 0) {
+                char discoveryString[128];
+                if (!isHostDiscovered && decodeString(discoveryString, sizeof(discoveryString)) && strcmp(discoveryString, REPLY_MSG) == 0) {
                     hostIP = remoteIP;
                     isHostDiscovered = true;
                     lastHostPacketTime = millis();
@@ -94,6 +95,13 @@ namespace Network {
             case MessageType::SETUP_CONFIG:
                 Serial.println("🛠️ Setup/config received");
                 // Handle setup/config data here
+                char configString[128];
+                if (decodeString(configString, sizeof(configString))) {
+                    Serial.print("Received config string: ");
+                    Serial.println(configString);
+                } else {
+                    Serial.println("Failed to decode config string.");
+                }
                 break;
             case MessageType::SENSOR_DATA:
                 Serial.println("📦 Sensor data received");
@@ -118,8 +126,9 @@ namespace Network {
     void hostDiscoveryTask(void* pvParams) {
         while (true) {
             if (!isHostDiscovered && millis() - lastDiscoveryTime > DISCOVERY_INTERVAL_MS) {
+                Serial.println("🔍 Sending discovery message");
                 startMessage(MessageType::DISCOVERY);
-                writePayloadChunk((const uint8_t*)REPLY_MSG, strlen(REPLY_MSG));
+                encodeString(REPLY_MSG);
                 endMessage();
                 lastDiscoveryTime = millis();
             }
@@ -131,6 +140,7 @@ namespace Network {
         while (true) {
             int len = udp.parsePacket();
             if (len > 0) {
+                Serial.println("📦 Packet received");
                 uint8_t packet[MAX_UDP_PACKET_SIZE];
                 int n = udp.read(packet, sizeof(packet));
                 if (n < 2) continue;
@@ -188,18 +198,23 @@ namespace Network {
             vTaskDelay(pdMS_TO_TICKS(3000));
             ESP.restart();
         }
-
         Serial.println("✅ WiFi connected");
+
         udp.begin(UDP_PORT);
+        Serial.println("Started UDP");
 
         broadcastIP = ~WiFi.subnetMask() | WiFi.gatewayIP();
+        Serial.println("Broadcast IP set");
 
         if (!udpMutex) udpMutex = xSemaphoreCreateMutex();
+        Serial.println("UDP mutex created");
 
         xTaskCreatePinnedToCore(hostDiscoveryTask, "HostDiscovery", 4096, nullptr, 1, nullptr, 1);
         xTaskCreatePinnedToCore(udpListenerTask, "UDPListener", 4096, nullptr, 1, nullptr, 1);
         xTaskCreatePinnedToCore(wifiMonitorTask, "WiFiMonitor", 2048, nullptr, 1, nullptr, 1);
-
+        Serial.println("Tasks created");
+        
+        vTaskDelete(NULL); // Delete the task after setup
         return;
     }
 
@@ -268,5 +283,34 @@ namespace Network {
         memcpy(outStruct, decodeBuffer + decodeIndex, structSize);
         decodeIndex += structSize;
         return true;
+    }
+
+    void encodeString(const char* str) {
+        if (!messageInProgress) return;
+        if (str == nullptr) return;
+
+        const char* ptr = str;
+        while (*ptr != '\0') {
+            udp.write((uint8_t*)ptr, 1);
+            messageCrc ^= *ptr;
+            ptr++;
+        }
+        udp.write((uint8_t)0); // Null terminator
+        messageCrc ^= 0;
+    }
+
+    bool decodeString(char* outStr, size_t maxLen) {
+        if (outStr == nullptr || maxLen == 0) return false;
+        size_t i = 0;
+        while (decodeIndex < decodeBufferSize && i < maxLen - 1) {
+            if (decodeBuffer[decodeIndex] == 0) {
+                decodeIndex++;
+                outStr[i] = 0;
+                return true;
+            }
+            outStr[i++] = decodeBuffer[decodeIndex++];
+        }
+        outStr[i] = 0; // Ensure null termination even if maxLen is reached
+        return false;
     }
 }

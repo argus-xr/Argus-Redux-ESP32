@@ -44,4 +44,8 @@ namespace Network {
     bool decodeInt(T& outVal);
 
     bool decodeStruct(void* outStruct, size_t structSize);
+    
+    void encodeString(const char* str);
+
+    bool decodeString(char* outStr, size_t maxLen);
 }

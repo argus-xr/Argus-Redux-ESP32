@@ -103,7 +103,7 @@ void setup() {
     setupIMU();
     Serial.println("IMU setup complete.");*/
 
-#if CAMERA_ENABLED
+/*#if CAMERA_ENABLED
     Serial.println("Initializing camera...");
     Camera::initCamera();
     Serial.println("Camera initialized!");
@@ -119,18 +119,18 @@ void setup() {
     } else {
         Serial.println("Camera semaphore created.");
     }
-#endif
+#endif*/
 
-    Serial.println("Setup complete.");
+    //Serial.println("Setup complete.");
 }
 
 void loop() {
     //bufferIMUSample();
     
-    if (xSemaphoreTake(Camera::frameReady, 0) == pdTRUE) { // Check if a frame is ready without blocking
+    /*if (xSemaphoreTake(Camera::frameReady, 0) == pdTRUE) { // Check if a frame is ready without blocking
         sendPacket(Camera::capturedFrame);
     }
     else if (imuIndex >= MAX_IMU_SAMPLES) {
         sendPacket(nullptr);
-    }
+    }*/
 }
