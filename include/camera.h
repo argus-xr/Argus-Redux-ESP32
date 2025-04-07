@@ -5,22 +5,41 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <freertos/semphr.h>
+#include <Preferences.h>
 
-namespace Camera {
-
+class CameraClass {
+public:
+    CameraClass();
+    ~CameraClass();
     void initCamera();
-    void cameraTask(void *param);
-
-    extern camera_fb_t* capturedFrame;
-    extern uint32_t frameTimestampStart;
-    extern uint32_t frameTimestampEnd;
-
-    extern SemaphoreHandle_t frameReady;
-    extern SemaphoreHandle_t frameHandled;
-
+    void start();
+    void stop(); // Add stopCameraTask() declaration
     void setFrameSize(framesize_t frameSize);
     framesize_t getFrameSize();
 
-} // namespace Camera
+    camera_fb_t* getCapturedFrame() const;
+    uint32_t getFrameTimestampStart() const;
+    uint32_t getFrameTimestampEnd() const;
+
+    SemaphoreHandle_t getFrameReadySemaphore() const;
+    SemaphoreHandle_t getFrameHandledSemaphore() const;
+
+private:
+    camera_fb_t* capturedFrame;
+    uint32_t frameTimestampStart;
+    uint32_t frameTimestampEnd;
+    uint32_t cameraTimeoutCount;
+    framesize_t currentFrameSize;
+    bool isRunning;
+    TaskHandle_t cameraTaskHandle;
+
+    SemaphoreHandle_t frameReady;
+    SemaphoreHandle_t frameHandled;
+    Preferences preferences;
+
+    void cameraTask();
+    static void cameraTaskEntryPoint(void *param);
+    void cleanFrameBuffer(); // New function to clean the frame buffer
+};
 
 #endif // CAMERA_H

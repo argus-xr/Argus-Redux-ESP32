@@ -19,7 +19,7 @@ namespace Network {
     const unsigned long HEARTBEAT_INTERVAL_MS = 2000;
     const unsigned long DISCOVERY_INTERVAL_MS = 1000;
     const int MAX_UDP_PACKET_SIZE = 512;
-    const uint8_t MAX_CHECKSUM_ERRORS = 10;
+    const uint8_t MAX_CRC_ERRORS = 10;
 
     WiFiUDP udp;
     IPAddress hostIP;
@@ -36,9 +36,9 @@ namespace Network {
     static uint32_t checksumErrorCount = 0;
 
     // --- Decoding Buffer ---
-    static const uint8_t* decodeBuffer = nullptr;
-    static size_t decodeBufferSize = 0;
-    static size_t decodeIndex = 0;
+    const uint8_t* decodeBuffer = nullptr;
+    size_t decodeBufferSize = 0;
+    size_t decodeIndex = 0;
 
     // CRC8 Lookup Table: 0xD5
     static const uint8_t CRC8_TABLE[256] = {
@@ -167,7 +167,7 @@ namespace Network {
                 if (calculatedChecksum != receivedChecksum) {
                     Serial.println("❌ Checksum fail");
                     checksumErrorCount++;
-                    if (checksumErrorCount > MAX_CHECKSUM_ERRORS) {
+                    if (checksumErrorCount > MAX_CRC_ERRORS) {
                         Serial.println("Too many checksum errors, resetting connection.");
                         isHostDiscovered = false;
                         checksumErrorCount = 0;
@@ -294,21 +294,6 @@ namespace Network {
     bool decodeInt(T& outVal) {
         if (decodeIndex + sizeof(T) > decodeBufferSize) return false;
         memcpy(&outVal, decodeBuffer + decodeIndex, sizeof(T));
-        decodeIndex += sizeof(T);
-        return true;
-    }
-
-    
-    template <typename T>
-    void encodeStruct(T value) {
-        const uint8_t* data = reinterpret_cast<const uint8_t*>(&value);
-        writePayloadChunk(data, sizeof(T));
-    }
-
-    template <typename T>
-    bool decodeStruct(T& outStruct) {
-        if (decodeIndex + sizeof(T) > decodeBufferSize) return false;
-        memcpy(&outStruct, decodeBuffer + decodeIndex, sizeof(T));
         decodeIndex += sizeof(T);
         return true;
     }

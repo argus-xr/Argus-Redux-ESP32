@@ -15,10 +15,10 @@ namespace Network {
     extern const uint8_t MAX_CRC_ERRORS;
 
     enum MessageType : uint8_t {
-		UNKNOWN			= 0x00,
-		DISCOVERY		= 0x01,
-		HELLO			= 0x02,
-		HEARTBEAT		= 0x03,
+        UNKNOWN			= 0x00,
+        DISCOVERY		= 0x01,
+        HELLO			= 0x02,
+        HEARTBEAT		= 0x03,
         SETUP_CONFIG    = 0x04,
         SENSOR_DATA     = 0x05,
     };
@@ -47,13 +47,26 @@ namespace Network {
 
     template <typename T>
     bool decodeInt(T& outVal);
-    
-    template <typename T>
-    void encodeStruct(T value);
+
+    // Moved decodeBuffer, decodeBufferSize, and decodeIndex declarations here
+    extern const uint8_t* decodeBuffer;
+    extern size_t decodeBufferSize;
+    extern size_t decodeIndex;
 
     template <typename T>
-    bool decodeStruct(T& outStruct);
-    
+    void encodeStruct(T value) {
+        const uint8_t* data = reinterpret_cast<const uint8_t*>(&value);
+        writePayloadChunk(data, sizeof(T));
+    }
+
+    template <typename T>
+    bool decodeStruct(T& outStruct) {
+        if (decodeIndex + sizeof(T) > decodeBufferSize) return false;
+        memcpy(&outStruct, decodeBuffer + decodeIndex, sizeof(T));
+        decodeIndex += sizeof(T);
+        return true;
+    }
+
     void encodeString(const char* str);
 
     bool decodeString(char* outStr, size_t maxLen);
