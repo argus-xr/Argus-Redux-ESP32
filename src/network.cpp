@@ -8,6 +8,7 @@
 #include "network.h"
 #include "config.h"
 #include "main.h"
+#include "SensorManager.h"
 
 namespace Network {
 
@@ -109,6 +110,7 @@ namespace Network {
                     lastHostPacketTime = millis();
                     Serial.print("🌟 Host discovered: ");
                     Serial.println(hostIP);
+                    SensorManager::instance.startSensors(); // Start sensors when host is discovered
                 }
                 break;
             case MessageType::HEARTBEAT:
@@ -200,6 +202,7 @@ namespace Network {
             if (isHostDiscovered && millis() - lastHostPacketTime > HOST_TIMEOUT_MS) {
                 Serial.println("⚠️ Host timeout — rediscovering");
                 isHostDiscovered = false; // Atomic write
+                SensorManager::instance.stopSensors(); // Stop sensors when host is lost
             }
 
             if (isHostDiscovered && millis() - lastHeartbeatTime > HEARTBEAT_INTERVAL_MS) {
@@ -213,6 +216,7 @@ namespace Network {
     }
 
     void connectWiFiTask(void* pvParams) {
+        Serial.println("Connecting to WiFi...");
         WiFi.mode(WIFI_STA);
         vTaskDelay(pdMS_TO_TICKS(1000));
         WiFiManager wm;

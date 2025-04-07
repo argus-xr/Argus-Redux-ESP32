@@ -2,20 +2,32 @@
 #include "IMU.h"
 #include "camera.h"
 #include <Arduino.h>
+#include "network.h"
+#include "config.h"
 
-SensorManager::SensorManager(IMU& imu, CameraClass& camera) : imu(imu), camera(camera), imuRunning(false), cameraRunning(false) {
+// Define the static instance
+SensorManager SensorManager::instance;
+
+SensorManager::SensorManager() : imuRunning(false), cameraRunning(false) {
 }
 
 SensorManager::~SensorManager() {
     stopSensors();
 }
 
+void SensorManager::init() {
+    Serial.println("SensorManager: Initializing sensors...");
+    imu.init();
+    camera.initCamera();
+    Serial.println("SensorManager: Sensors initialized.");
+    vTaskDelay(pdMS_TO_TICKS(1000)); // Give some time for the camera to initialize
+}
+
 void SensorManager::startSensors() {
-    Serial.println("Starting sensors...");
+    Serial.println("SensorManager: Starting sensors...");
     if (!imuRunning) {
         Serial.println("Starting IMU...");
-        imu.init();
-        imu.start(); // Start the IMU task
+        imu.start();
         imuRunning = true;
         Serial.println("IMU started.");
     } else {
@@ -30,11 +42,11 @@ void SensorManager::startSensors() {
     } else {
         Serial.println("Camera already running.");
     }
-    Serial.println("Sensors started.");
+    Serial.println("SensorManager: Sensors started.");
 }
 
 void SensorManager::stopSensors() {
-    Serial.println("Stopping sensors...");
+    Serial.println("SensorManager: Stopping sensors...");
     if (imuRunning) {
         Serial.println("Stopping IMU...");
         imu.stop(); // Stop the IMU task
@@ -54,7 +66,7 @@ void SensorManager::stopSensors() {
         Serial.println("Camera not running.");
     }
 #endif
-    Serial.println("Sensors stopped.");
+    Serial.println("SensorManager: Sensors stopped.");
 }
 
 bool SensorManager::isImuRunning() const {
@@ -63,4 +75,71 @@ bool SensorManager::isImuRunning() const {
 
 bool SensorManager::isCameraRunning() const {
     return cameraRunning;
+}
+
+uint16_t SensorManager::readBatteryMv() {
+    int raw = analogRead(BATTERY_PIN);
+    float voltage = raw / 4095.0f * 3.3f * 2.0f * BATTERY_CALIBRATION_FACTOR;
+    return static_cast<uint16_t>(voltage * 1000);
+}
+
+void SensorManager::sendPacket(camera_fb_t *frame) {
+    // Check if the host is discovered before sending
+    if (!Network::isHostDiscovered) {
+        if (frame) {
+            xSemaphoreGive(camera.getFrameHandledSemaphore()); // Signal that the frame has been handled, even though it wasn't sent
+        }
+        return;
+    }
+
+    Network::startMessage(Network::MessageType::SENSOR_DATA);
+
+    PacketHeader header;
+    if (frame) {
+        header.cameraTimestampStart = camera.getFrameTimestampStart();
+        header.cameraTimestampEnd = camera.getFrameTimestampEnd();
+        header.imageSize = frame->len;
+    }
+    else {
+        header.cameraTimestampStart = 0;
+        header.cameraTimestampEnd = 0;
+        header.imageSize = 0;
+    }
+    
+    header.batteryMv = readBatteryMv();
+    uint8_t imuCount = imu.getSampleCount();
+    IMUSample imuBuffer[imuCount];
+    imuCount = imu.getSamples(imuBuffer, imuCount); // Get the actual number of samples copied
+    header.imuCount = imuCount;
+
+    Network::encodeStruct(header);
+    Network::writePayloadChunk((uint8_t*)imuBuffer, imuCount * sizeof(IMUSample));
+    if (frame) {
+        Network::writePayloadChunk(frame->buf, frame->len);
+    }
+    Network::endMessage();
+
+    if (frame) {
+        xSemaphoreGive(camera.getFrameHandledSemaphore()); // Signal that the frame has been handled
+    }
+}
+
+void SensorManager::processSensorData() {
+    if (xSemaphoreTake(camera.getFrameReadySemaphore(), 0) == pdTRUE) { // Check if a frame is ready without blocking
+        camera_fb_t *frame = camera.getCapturedFrame();
+        if (!frame) {
+            xSemaphoreGive(camera.getFrameHandledSemaphore());
+        }
+        sendPacket(frame);
+    } else if (imu.getSampleCount() >= MAX_IMU_SAMPLES/2) {
+        sendPacket(nullptr);
+    }
+}
+
+IMU& SensorManager::getIMU() {
+    return instance.imu;
+}
+
+CameraClass& SensorManager::getCamera() {
+    return instance.camera;
 }

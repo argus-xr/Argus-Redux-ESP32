@@ -102,9 +102,11 @@ void CameraClass::cameraTask() {
                 }
             } else {
                 cameraTimeoutCount = 0;
+                xSemaphoreGive(frameReady); // Signal that a frame (or timeout) is ready
+                Serial.println("Waiting for frame to be handled");
+                xSemaphoreTake(frameHandled, portMAX_DELAY); // Wait until it's handled before we start on the next one
+                Serial.println("Frame handled");
             }
-            xSemaphoreGive(frameReady); // Signal that a frame (or timeout) is ready
-            xSemaphoreTake(frameHandled, portMAX_DELAY); // Wait until it's handled before we start on the next one
             if (capturedFrame) {
                 esp_camera_fb_return(capturedFrame);
                 capturedFrame = nullptr;
