@@ -34,6 +34,7 @@ private:
     static void imuTaskEntryPoint(void *param); // Static wrapper function
     TaskHandle_t imuTaskHandle;
     bool isRunning;
+    bool logNextSuccessfulRead;
 };
 
 #endif // IMU_H

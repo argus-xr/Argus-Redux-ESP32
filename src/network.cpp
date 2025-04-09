@@ -16,7 +16,7 @@ namespace Network {
     const int UDP_PORT = 4210;
     const char* DISCOVERY_MSG = "ARGUS_DISCOVERY";
     const char* REPLY_MSG = "ARGUS_REPLY";
-    const unsigned long HOST_TIMEOUT_MS = 60000;
+    const unsigned long HOST_TIMEOUT_MS = 10000;
     const unsigned long HEARTBEAT_INTERVAL_MS = 2000;
     const unsigned long DISCOVERY_INTERVAL_MS = 1000;
     const int MAX_UDP_PACKET_SIZE = 512;
@@ -61,20 +61,30 @@ namespace Network {
         0x84, 0x51, 0xFB, 0x2E, 0x7A, 0xAF, 0x05, 0xD0,   0xAD, 0x78, 0xD2, 0x07, 0x53, 0x86, 0x2C, 0xF9
     };
 
-    void startMessage(MessageType type) {
-        if (messageInProgress) return;
+    bool startMessage(IPAddress ip, MessageType type) {
+        if (messageInProgress || WiFi.status() != WL_CONNECTED) return false;
         if (udpMutex) xSemaphoreTake(udpMutex, portMAX_DELAY);
 
         messageInProgress = true;
-
-        if (isHostDiscovered) {
-            udp.beginPacket(hostIP, UDP_PORT);
-        } else {
-            udp.beginPacket(broadcastIP, UDP_PORT);
+        
+        if (!udp.beginPacket(ip, UDP_PORT)) {
+            if (udpMutex) xSemaphoreGive(udpMutex);
+            Serial.println("❌ Failed to start UDP packet");
+            logMemoryHealth();
         }
 
         messageCrc = 0; // Reset checksum
         encodeInt<uint8_t>(static_cast<uint8_t>(type)); // Encode the message type as a VarInt and update the checksum
+        return true;
+    }
+
+    bool startMessageBroadcast(MessageType type) {
+        return startMessage(broadcastIP, type);
+    }
+
+    bool startMessageToHost(MessageType type) {
+        if (!isHostDiscovered) return false;
+        return startMessage(hostIP, type);
     }
 
     void writePayloadChunk(const uint8_t* data, size_t length) {
@@ -88,7 +98,9 @@ namespace Network {
     void endMessage() {
         if (!messageInProgress) return;
         udp.write(&messageCrc, 1);
-        udp.endPacket();
+        if (!udp.endPacket()) {
+            logMemoryHealth();
+        }
 
         messageInProgress = false;
         if (udpMutex) xSemaphoreGive(udpMutex);
@@ -146,10 +158,13 @@ namespace Network {
     void hostDiscoveryTask(void* pvParams) {
         while (true) {
             if (!isHostDiscovered) {
-                Serial.println("🔍 Sending discovery message");
-                startMessage(MessageType::DISCOVERY);
-                encodeString(DISCOVERY_MSG);
-                endMessage();
+                if (startMessageBroadcast(MessageType::DISCOVERY)) {
+                    Serial.println("🔍 Sending discovery message");
+                    encodeString(DISCOVERY_MSG);
+                    endMessage();
+                } else {
+                    Serial.println("🔍 Sending discovery message FAILED");
+                }
             }
             vTaskDelay(pdMS_TO_TICKS(DISCOVERY_INTERVAL_MS)); // Wait for the interval
         }
@@ -206,8 +221,9 @@ namespace Network {
             }
 
             if (isHostDiscovered && millis() - lastHeartbeatTime > HEARTBEAT_INTERVAL_MS) {
-                startMessage(MessageType::HEARTBEAT);
-                endMessage();
+                if (startMessageToHost(MessageType::HEARTBEAT)) {
+                    endMessage();
+                }
                 lastHeartbeatTime = millis();
             }
 
@@ -327,5 +343,20 @@ namespace Network {
         }
         outStr[i] = 0; // Ensure null termination even if maxLen is reached
         return false;
+    }
+
+    void logMemoryHealth() {
+        Serial.printf("💾 Internal heap: %u free, %u minimum ever\n",
+                        esp_get_free_heap_size(),
+                        esp_get_minimum_free_heap_size());
+        
+        #if CONFIG_SPIRAM_SUPPORT
+        Serial.printf("💾 PSRAM: %u free, %u total\n",
+                        heap_caps_get_free_size(MALLOC_CAP_SPIRAM),
+                        heap_caps_get_total_size(MALLOC_CAP_SPIRAM));
+        #endif
+        
+        // If you want more detailed info:
+        // heap_caps_print_heap_info(MALLOC_CAP_DEFAULT);
     }
 }

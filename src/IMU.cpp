@@ -21,6 +21,7 @@ void IMU::init() {
             Serial.println("MPU6050 connection failed");
         } else {
             Serial.println("MPU6050 connected");
+            imu.setSleepEnabled(false); // Prevent sleeping.
         }
     } else {
         Serial.println("Wire.begin() failed");
@@ -39,6 +40,8 @@ void IMU::imuTaskEntryPoint(void *param) {
 }
 
 void IMU::imuTask() {
+    Serial.println("IMU task started");
+    logNextSuccessfulRead = true;
     while (true) {
         if (isRunning) {
             bufferIMUSample();
@@ -53,6 +56,15 @@ void IMU::bufferIMUSample() {
     int16_t ax, ay, az, gx, gy, gz;
     imu.getAcceleration(&ax, &ay, &az);
     imu.getRotation(&gx, &gy, &gz);
+
+    if (ax == 0 && ay == 0 && az == 0 && gx == 0 && gy == 0 && gz == 0) {
+        // Error
+        logNextSuccessfulRead = true;
+        return;
+    } else if (logNextSuccessfulRead) {
+        Serial.println("IMU returned valid data");
+        logNextSuccessfulRead = false;
+    }
 
     IMUSample sample;
     sample.timestampUs = esp_timer_get_time();

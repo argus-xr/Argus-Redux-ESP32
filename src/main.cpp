@@ -25,6 +25,7 @@ void setup() {
     SensorManager::instance.init();
 
     Serial.println("Main: Setup complete.");
+    Serial.printf("Free heap: %u", esp_get_free_heap_size());
 }
 
 void loop() {

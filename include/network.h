@@ -28,7 +28,9 @@ namespace Network {
 
     void startNetworkTasks();
 
-    void startMessage(MessageType type);
+    bool startMessage(IPAddress ip, MessageType type); // Returns true when we have a valid connection and can write a message.
+    bool startMessageBroadcast(MessageType type);
+    bool startMessageToHost(MessageType type);
     void writePayloadChunk(const uint8_t* data, size_t length);
     void endMessage();
 
@@ -70,4 +72,6 @@ namespace Network {
     void encodeString(const char* str);
 
     bool decodeString(char* outStr, size_t maxLen);
+
+    void logMemoryHealth();
 }

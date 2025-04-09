@@ -40,6 +40,7 @@ private:
     void cameraTask();
     static void cameraTaskEntryPoint(void *param);
     void cleanFrameBuffer(); // New function to clean the frame buffer
+    bool initialized;
 };
 
 #endif // CAMERA_H

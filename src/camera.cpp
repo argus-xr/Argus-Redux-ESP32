@@ -6,9 +6,17 @@
 #define CAMERA_MODEL_AI_THINKER
 #include "camera_pins.h" // load up ESP32-Cam pins, but allow switching to other models easily if needed.
 
-CameraClass::CameraClass() : capturedFrame(nullptr), frameTimestampStart(0), frameTimestampEnd(0), cameraTimeoutCount(0), currentFrameSize(FRAMESIZE_QVGA), frameReady(nullptr), frameHandled(nullptr), cameraTaskHandle(nullptr), isRunning(false) {
+CameraClass::CameraClass() {
+    capturedFrame = nullptr;
+    frameTimestampStart = 0;
+    frameTimestampEnd = 0;
+    cameraTimeoutCount = 0;
+    currentFrameSize = FRAMESIZE_QVGA;
     frameReady = xSemaphoreCreateBinary();
     frameHandled = xSemaphoreCreateBinary();
+    cameraTaskHandle = nullptr;
+    isRunning = false;
+    initialized = false;
 }
 
 CameraClass::~CameraClass() {
@@ -22,7 +30,12 @@ CameraClass::~CameraClass() {
 }
 
 void CameraClass::initCamera() {
+    if (initialized) {
+        Serial.println("Camera already initialized, skipping init.");
+        return;
+    }
     Serial.println("Initializing camera...");
+    initialized = true;
     camera_config_t config;
     config.ledc_channel = LEDC_CHANNEL_0;
     config.ledc_timer = LEDC_TIMER_0;
@@ -42,7 +55,7 @@ void CameraClass::initCamera() {
     config.pin_sccb_scl = SIOC_GPIO_NUM;
     config.pin_pwdn = PWDN_GPIO_NUM;
     config.pin_reset = RESET_GPIO_NUM;
-    config.xclk_freq_hz = 20000000;
+    config.xclk_freq_hz = 10000000;
     config.pixel_format = PIXFORMAT_JPEG;
     config.frame_size = currentFrameSize;
     config.jpeg_quality = 12;
@@ -85,7 +98,10 @@ void CameraClass::cameraTask() {
             uint32_t waitStart = micros();
             while ((micros() - waitStart) < CAMERA_TIMEOUT_US) {
                 fb = esp_camera_fb_get();
-                if (fb) break;
+                if (fb) {
+                    Serial.println("Got frame");
+                    break;
+                }
                 vTaskDelay(pdMS_TO_TICKS(1)); // Wait 1 ms
             }
             capturedFrame = fb;
@@ -97,15 +113,17 @@ void CameraClass::cameraTask() {
                 if (cameraTimeoutCount > MAX_CAMERA_TIMEOUTS) {
                     Serial.println("Too many camera timeouts, resetting camera.");
                     esp_camera_deinit();
+                    initialized = false;
                     initCamera();
                     cameraTimeoutCount = 0;
                 }
             } else {
                 cameraTimeoutCount = 0;
-                xSemaphoreGive(frameReady); // Signal that a frame (or timeout) is ready
+                Serial.println("Frame captured");
+                /*xSemaphoreGive(frameReady); // Signal that a frame (or timeout) is ready
                 Serial.println("Waiting for frame to be handled");
                 xSemaphoreTake(frameHandled, portMAX_DELAY); // Wait until it's handled before we start on the next one
-                Serial.println("Frame handled");
+                Serial.println("Frame handled");*/
             }
             if (capturedFrame) {
                 esp_camera_fb_return(capturedFrame);

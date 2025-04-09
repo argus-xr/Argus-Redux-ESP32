@@ -27,8 +27,8 @@ void SensorManager::startSensors() {
     Serial.println("SensorManager: Starting sensors...");
     if (!imuRunning) {
         Serial.println("Starting IMU...");
-        imu.start();
-        imuRunning = true;
+        //imu.start();
+        //imuRunning = true;
         Serial.println("IMU started.");
     } else {
         Serial.println("IMU already running.");
@@ -49,8 +49,8 @@ void SensorManager::stopSensors() {
     Serial.println("SensorManager: Stopping sensors...");
     if (imuRunning) {
         Serial.println("Stopping IMU...");
-        imu.stop(); // Stop the IMU task
-        imuRunning = false;
+        //imu.stop(); // Stop the IMU task
+        //imuRunning = false;
         Serial.println("IMU stopped.");
     } else {
         Serial.println("IMU not running.");
@@ -92,32 +92,32 @@ void SensorManager::sendPacket(camera_fb_t *frame) {
         return;
     }
 
-    Network::startMessage(Network::MessageType::SENSOR_DATA);
+    if (Network::startMessageToHost(Network::MessageType::SENSOR_DATA)) {
+        PacketHeader header;
+        if (frame) {
+            header.cameraTimestampStart = camera.getFrameTimestampStart();
+            header.cameraTimestampEnd = camera.getFrameTimestampEnd();
+            header.imageSize = frame->len;
+        }
+        else {
+            header.cameraTimestampStart = 0;
+            header.cameraTimestampEnd = 0;
+            header.imageSize = 0;
+        }
+        
+        header.batteryMv = readBatteryMv();
+        uint8_t imuCount = imu.getSampleCount();
+        IMUSample imuBuffer[imuCount];
+        imuCount = imu.getSamples(imuBuffer, imuCount); // Get the actual number of samples copied
+        header.imuCount = imuCount;
 
-    PacketHeader header;
-    if (frame) {
-        header.cameraTimestampStart = camera.getFrameTimestampStart();
-        header.cameraTimestampEnd = camera.getFrameTimestampEnd();
-        header.imageSize = frame->len;
+        Network::encodeStruct(header);
+        Network::writePayloadChunk((uint8_t*)imuBuffer, imuCount * sizeof(IMUSample));
+        if (frame) {
+            Network::writePayloadChunk(frame->buf, frame->len);
+        }
+        Network::endMessage();
     }
-    else {
-        header.cameraTimestampStart = 0;
-        header.cameraTimestampEnd = 0;
-        header.imageSize = 0;
-    }
-    
-    header.batteryMv = readBatteryMv();
-    uint8_t imuCount = imu.getSampleCount();
-    IMUSample imuBuffer[imuCount];
-    imuCount = imu.getSamples(imuBuffer, imuCount); // Get the actual number of samples copied
-    header.imuCount = imuCount;
-
-    Network::encodeStruct(header);
-    Network::writePayloadChunk((uint8_t*)imuBuffer, imuCount * sizeof(IMUSample));
-    if (frame) {
-        Network::writePayloadChunk(frame->buf, frame->len);
-    }
-    Network::endMessage();
 
     if (frame) {
         xSemaphoreGive(camera.getFrameHandledSemaphore()); // Signal that the frame has been handled
