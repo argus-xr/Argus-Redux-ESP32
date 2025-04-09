@@ -55,11 +55,13 @@ void CameraClass::initCamera() {
     config.pin_sccb_scl = SIOC_GPIO_NUM;
     config.pin_pwdn = PWDN_GPIO_NUM;
     config.pin_reset = RESET_GPIO_NUM;
-    config.xclk_freq_hz = 10000000;
+    config.xclk_freq_hz = 20000000;
     config.pixel_format = PIXFORMAT_JPEG;
     config.frame_size = currentFrameSize;
     config.jpeg_quality = 12;
     config.fb_count = 1;
+    config.fb_location = CAMERA_FB_IN_PSRAM;
+    config.grab_mode = CAMERA_GRAB_WHEN_EMPTY;
 
     esp_err_t err = esp_camera_init(&config);
     if (err != ESP_OK) {
@@ -72,7 +74,7 @@ void CameraClass::initCamera() {
 
 void CameraClass::start() {
     if (!cameraTaskHandle) {
-        xTaskCreatePinnedToCore(CameraClass::cameraTaskEntryPoint, "Camera Task", 8192, this, 5, &cameraTaskHandle, 0);
+        xTaskCreatePinnedToCore(CameraClass::cameraTaskEntryPoint, "Camera Task", 8192, this, 5, &cameraTaskHandle, 1);
     }
     isRunning = true;
 }
@@ -102,7 +104,7 @@ void CameraClass::cameraTask() {
                     Serial.println("Got frame");
                     break;
                 }
-                vTaskDelay(pdMS_TO_TICKS(1)); // Wait 1 ms
+                vTaskDelay(pdMS_TO_TICKS(10)); // Wait 10 ms
             }
             capturedFrame = fb;
             frameTimestampStart = waitStart;
@@ -119,13 +121,13 @@ void CameraClass::cameraTask() {
                 }
             } else {
                 cameraTimeoutCount = 0;
-                Serial.println("Frame captured");
-                /*xSemaphoreGive(frameReady); // Signal that a frame (or timeout) is ready
+                xSemaphoreGive(frameReady); // Signal that a frame (or timeout) is ready
                 Serial.println("Waiting for frame to be handled");
                 xSemaphoreTake(frameHandled, portMAX_DELAY); // Wait until it's handled before we start on the next one
-                Serial.println("Frame handled");*/
+                Serial.println("Frame handled");
             }
             if (capturedFrame) {
+                Serial.println("Clearing framebuffer");
                 esp_camera_fb_return(capturedFrame);
                 capturedFrame = nullptr;
             }

@@ -87,6 +87,7 @@ void SensorManager::sendPacket(camera_fb_t *frame) {
     // Check if the host is discovered before sending
     if (!Network::isHostDiscovered) {
         if (frame) {
+            Serial.println("SensorManager: Frame not sent, host not discovered.");
             xSemaphoreGive(camera.getFrameHandledSemaphore()); // Signal that the frame has been handled, even though it wasn't sent
         }
         return;
@@ -114,12 +115,13 @@ void SensorManager::sendPacket(camera_fb_t *frame) {
         Network::encodeStruct(header);
         Network::writePayloadChunk((uint8_t*)imuBuffer, imuCount * sizeof(IMUSample));
         if (frame) {
-            Network::writePayloadChunk(frame->buf, frame->len);
+            //Network::writePayloadChunk(frame->buf, frame->len);
         }
         Network::endMessage();
     }
 
     if (frame) {
+        Serial.println("Returning framebuffer");
         xSemaphoreGive(camera.getFrameHandledSemaphore()); // Signal that the frame has been handled
     }
 }
@@ -128,9 +130,12 @@ void SensorManager::processSensorData() {
     if (xSemaphoreTake(camera.getFrameReadySemaphore(), 0) == pdTRUE) { // Check if a frame is ready without blocking
         camera_fb_t *frame = camera.getCapturedFrame();
         if (!frame) {
+            Serial.println("SensorManager: No frame captured.");
             xSemaphoreGive(camera.getFrameHandledSemaphore());
+        } else {
+            sendPacket(frame);
+            //xSemaphoreGive(camera.getFrameHandledSemaphore());
         }
-        sendPacket(frame);
     } else if (imu.getSampleCount() >= MAX_IMU_SAMPLES/2) {
         sendPacket(nullptr);
     }
