@@ -36,7 +36,6 @@ namespace Network {
 
     void handleMessage(MessageType type, const uint8_t* payload, size_t length, IPAddress remoteIP);
 
-
     // --- Encoding helpers ---
     uint8_t crc8_update(uint8_t crc, uint8_t data);
     uint8_t calculateChecksum(const uint8_t* data, size_t len);
@@ -50,7 +49,6 @@ namespace Network {
     template <typename T>
     bool decodeInt(T& outVal);
 
-    // Moved decodeBuffer, decodeBufferSize, and decodeIndex declarations here
     extern const uint8_t* decodeBuffer;
     extern size_t decodeBufferSize;
     extern size_t decodeIndex;
@@ -70,7 +68,6 @@ namespace Network {
     }
 
     void encodeString(const char* str);
-
     bool decodeString(char* outStr, size_t maxLen);
 
     void logMemoryHealth();

@@ -1,6 +1,6 @@
 #include <Arduino.h>
 #include <Preferences.h>
-#include "camera.h"
+#include "sensors/camera.h"
 #include "config.h"
 
 #define CAMERA_MODEL_AI_THINKER
@@ -29,7 +29,7 @@ CameraClass::~CameraClass() {
     }
 }
 
-void CameraClass::initCamera() {
+void CameraClass::init() {
     if (initialized) {
         Serial.println("Camera already initialized, skipping init.");
         return;
@@ -116,7 +116,7 @@ void CameraClass::cameraTask() {
                     Serial.println("Too many camera timeouts, resetting camera.");
                     esp_camera_deinit();
                     initialized = false;
-                    initCamera();
+                    init();
                     cameraTimeoutCount = 0;
                 }
             } else {
@@ -143,7 +143,7 @@ void CameraClass::setFrameSize(framesize_t frameSize) {
     preferences.end();
     currentFrameSize = frameSize;
     esp_camera_deinit();
-    initCamera();
+    init();
 }
 
 framesize_t CameraClass::getFrameSize() {
@@ -178,4 +178,9 @@ SemaphoreHandle_t CameraClass::getFrameReadySemaphore() const {
 
 SemaphoreHandle_t CameraClass::getFrameHandledSemaphore() const {
     return frameHandled;
+}
+
+SensorData CameraClass::getSensorData() {
+    SensorData data;
+    return data;
 }

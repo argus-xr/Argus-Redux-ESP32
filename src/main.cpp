@@ -3,13 +3,11 @@
 #include <esp_timer.h>
 #include <soc/rtc.h>
 #include <esp_heap_caps.h>
-#include "camera.h"
 #include "main.h"
 #include <Preferences.h>
 #include "network.h"
 #include "config.h"
-#include "imu.h"
-#include "sensormanager.h"
+#include "sensors/sensormanager.h"
 
 // --- FUNCTION DEFINITIONS ---
 

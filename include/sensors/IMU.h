@@ -8,6 +8,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <freertos/queue.h>
+#include "sensors/sensorbase.h"
 
 // Structure to hold a single IMU sample
 typedef struct {
@@ -16,7 +17,7 @@ typedef struct {
     int16_t gyro[3];
 } IMUSample;
 
-class IMU {
+class IMU : public SensorBase {
 public:
     IMU();
     ~IMU();
@@ -26,6 +27,7 @@ public:
     QueueHandle_t imuQueue;
     void start();
     void stop();
+    SensorData getSensorData();
 
 private:
     MPU6050 imu;

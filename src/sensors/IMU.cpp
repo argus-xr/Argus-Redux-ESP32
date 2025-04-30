@@ -1,4 +1,4 @@
-#include "imu.h"
+#include "sensors/imu.h"
 #include <Wire.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -110,4 +110,9 @@ void IMU::stop() {
     if (imuQueue) {
         xQueueReset(imuQueue); // Clear the queue
     }
+}
+
+SensorData IMU::getSensorData() {
+    SensorData data;
+    return data;
 }

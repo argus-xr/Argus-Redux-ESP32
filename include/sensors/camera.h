@@ -6,14 +6,17 @@
 #include <freertos/task.h>
 #include <freertos/semphr.h>
 #include <Preferences.h>
+#include "sensors/sensorbase.h"
 
-class CameraClass {
+class CameraClass : public SensorBase
+{
 public:
     CameraClass();
     ~CameraClass();
-    void initCamera();
+    void init();
     void start();
-    void stop(); // Add stopCameraTask() declaration
+    void stop();
+    SensorData getSensorData();
     void setFrameSize(framesize_t frameSize);
     framesize_t getFrameSize();
 

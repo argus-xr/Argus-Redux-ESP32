@@ -1,6 +1,4 @@
-#include "SensorManager.h"
-#include "IMU.h"
-#include "camera.h"
+#include "sensors/SensorManager.h"
 #include <Arduino.h>
 #include "network.h"
 #include "config.h"
@@ -18,7 +16,7 @@ SensorManager::~SensorManager() {
 void SensorManager::init() {
     Serial.println("SensorManager: Initializing sensors...");
     imu.init();
-    camera.initCamera();
+    camera.init();
     Serial.println("SensorManager: Sensors initialized.");
     vTaskDelay(pdMS_TO_TICKS(1000)); // Give some time for the camera to initialize
 }

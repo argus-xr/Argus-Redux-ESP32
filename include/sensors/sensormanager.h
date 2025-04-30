@@ -1,8 +1,8 @@
 #ifndef SENSOR_MANAGER_H
 #define SENSOR_MANAGER_H
 
-#include "IMU.h"
-#include "camera.h"
+#include "sensors/IMU.h"
+#include "sensors/camera.h"
 #include "config.h"
 
 // Packet header structure

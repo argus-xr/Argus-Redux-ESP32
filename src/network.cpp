@@ -8,7 +8,7 @@
 #include "network.h"
 #include "config.h"
 #include "main.h"
-#include "SensorManager.h"
+#include "sensors/SensorManager.h"
 
 namespace Network {
 
