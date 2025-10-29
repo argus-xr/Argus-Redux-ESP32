@@ -40,35 +40,35 @@ namespace Network {
     uint8_t crc8_update(uint8_t crc, uint8_t data);
     uint8_t calculateChecksum(const uint8_t* data, size_t len);
     void updateCrc(uint8_t data);
-    void encodeVarInt(uint32_t value);
-    bool decodeVarInt(uint32_t& outVal);
+    void writeVarInt(uint32_t value);
+    bool readVarInt(uint32_t& outVal);
 
     template <typename T>
-    void encodeInt(T value);
+    void writeInt(T value);
 
     template <typename T>
-    bool decodeInt(T& outVal);
+    bool readInt(T& outVal);
 
     extern const uint8_t* decodeBuffer;
     extern size_t decodeBufferSize;
     extern size_t decodeIndex;
 
     template <typename T>
-    void encodeStruct(T value) {
+    void writeStruct(T value) {
         const uint8_t* data = reinterpret_cast<const uint8_t*>(&value);
         writePayloadChunk(data, sizeof(T));
     }
 
     template <typename T>
-    bool decodeStruct(T& outStruct) {
+    bool readStruct(T& outStruct) {
         if (decodeIndex + sizeof(T) > decodeBufferSize) return false;
         memcpy(&outStruct, decodeBuffer + decodeIndex, sizeof(T));
         decodeIndex += sizeof(T);
         return true;
     }
 
-    void encodeString(const char* str);
-    bool decodeString(char* outStr, size_t maxLen);
+    void writeString(const char* str);
+    bool readString(char* outStr, size_t maxLen);
 
     void logMemoryHealth();
 }

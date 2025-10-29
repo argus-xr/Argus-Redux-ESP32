@@ -13,10 +13,11 @@ class CameraClass : public SensorBase
 public:
     CameraClass();
     ~CameraClass();
-    void init();
-    void start();
-    void stop();
-    SensorData getSensorData();
+    void init() override;
+    void start() override;
+    void stop() override;
+    void writeSensorDataToPacket() override;
+    
     void setFrameSize(framesize_t frameSize);
     framesize_t getFrameSize();
 
@@ -35,6 +36,7 @@ private:
     framesize_t currentFrameSize;
     bool isRunning;
     TaskHandle_t cameraTaskHandle;
+    SemaphoreHandle_t mutex;
 
     SemaphoreHandle_t frameReady;
     SemaphoreHandle_t frameHandled;
@@ -42,7 +44,7 @@ private:
 
     void cameraTask();
     static void cameraTaskEntryPoint(void *param);
-    void cleanFrameBuffer(); // New function to clean the frame buffer
+    void cleanFrameBuffer();
     bool initialized;
 };
 

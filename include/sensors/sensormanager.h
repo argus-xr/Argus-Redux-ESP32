@@ -27,14 +27,14 @@ public:
     void processSensorData();
 
     // Static accessors for the IMU and Camera
-    static IMU& getIMU();
+    static IMU* getIMU();
     static CameraClass& getCamera();
 
     // Static instance of SensorManager
     static SensorManager instance;
 
 private:
-    IMU imu; // IMU is now a member
+    IMU* imu; // IMU is now a member
     CameraClass camera; // Camera is now a member
     bool imuRunning;
     bool cameraRunning;

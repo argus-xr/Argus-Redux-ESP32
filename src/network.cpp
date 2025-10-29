@@ -74,7 +74,7 @@ namespace Network {
         }
 
         messageCrc = 0; // Reset checksum
-        encodeInt<uint8_t>(static_cast<uint8_t>(type)); // Encode the message type as a VarInt and update the checksum
+        writeInt<uint8_t>(static_cast<uint8_t>(type)); // Encode the message type as a VarInt and update the checksum
         return true;
     }
 
@@ -132,7 +132,7 @@ namespace Network {
                 Serial.println("🛠️ Setup/config received");
                 // Handle setup/config data here
                 char configString[128];
-                if (decodeString(configString, sizeof(configString))) {
+                if (readString(configString, sizeof(configString))) {
                     Serial.print("Received config string: ");
                     Serial.println(configString);
                 } else {
@@ -160,7 +160,7 @@ namespace Network {
             if (!isHostDiscovered) {
                 if (startMessageBroadcast(MessageType::DISCOVERY)) {
                     Serial.println("🔍 Sending discovery message");
-                    encodeString(DISCOVERY_MSG);
+                    writeString(DISCOVERY_MSG);
                     endMessage();
                 } else {
                     Serial.println("🔍 Sending discovery message FAILED");
@@ -198,7 +198,7 @@ namespace Network {
                 decodeBuffer = packet;
                 decodeBufferSize = n - 1; // Exclude checksum byte
                 decodeIndex = 0;
-                if (!decodeVarInt(typeRaw)) continue;
+                if (!readVarInt(typeRaw)) continue;
                 
                 MessageType type = static_cast<MessageType>(typeRaw);
 
@@ -282,7 +282,7 @@ namespace Network {
         messageCrc = crc8_update(messageCrc, data);
     }
 
-    void encodeVarInt(uint32_t value) {
+    void writeVarInt(uint32_t value) {
         do {
             uint8_t byte = value & 0x7F;
             value >>= 7;
@@ -291,7 +291,7 @@ namespace Network {
         } while (value);
     }
 
-    bool decodeVarInt(uint32_t& outVal) {
+    bool readVarInt(uint32_t& outVal) {
         outVal = 0;
         uint8_t byte;
         int shift = 0;
@@ -306,19 +306,19 @@ namespace Network {
     }
 
     template <typename T>
-    void encodeInt(T value) {
+    void writeInt(T value) {
         writePayloadChunk(reinterpret_cast<const uint8_t*>(&value), sizeof(T));
     }
 
     template <typename T>
-    bool decodeInt(T& outVal) {
+    bool readInt(T& outVal) {
         if (decodeIndex + sizeof(T) > decodeBufferSize) return false;
         memcpy(&outVal, decodeBuffer + decodeIndex, sizeof(T));
         decodeIndex += sizeof(T);
         return true;
     }
 
-    void encodeString(const char* str) {
+    void writeString(const char* str) {
         if (!messageInProgress) return;
         if (str == nullptr) return;
 
@@ -330,7 +330,7 @@ namespace Network {
         writePayloadChunk((uint8_t*)"\0", 1); // Null terminator
     }
 
-    bool decodeString(char* outStr, size_t maxLen) {
+    bool readString(char* outStr, size_t maxLen) {
         if (outStr == nullptr || maxLen == 0) return false;
         size_t i = 0;
         while (decodeIndex < decodeBufferSize && i < maxLen - 1) {
@@ -359,4 +359,8 @@ namespace Network {
         // If you want more detailed info:
         // heap_caps_print_heap_info(MALLOC_CAP_DEFAULT);
     }
+
+    // Explicit template specializations
+    template void Network::writeInt<uint8_t>(uint8_t);
+    template void Network::writeInt<uint16_t>(uint16_t);
 }

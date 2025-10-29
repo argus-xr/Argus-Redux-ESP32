@@ -7,6 +7,7 @@
 SensorManager SensorManager::instance;
 
 SensorManager::SensorManager() : imuRunning(false), cameraRunning(false) {
+    imu = new IMU(1);
 }
 
 SensorManager::~SensorManager() {
@@ -15,7 +16,7 @@ SensorManager::~SensorManager() {
 
 void SensorManager::init() {
     Serial.println("SensorManager: Initializing sensors...");
-    imu.init();
+    imu->init();
     camera.init();
     Serial.println("SensorManager: Sensors initialized.");
     vTaskDelay(pdMS_TO_TICKS(1000)); // Give some time for the camera to initialize
@@ -47,8 +48,8 @@ void SensorManager::stopSensors() {
     Serial.println("SensorManager: Stopping sensors...");
     if (imuRunning) {
         Serial.println("Stopping IMU...");
-        //imu.stop(); // Stop the IMU task
-        //imuRunning = false;
+        imu->stop(); // Stop the IMU task
+        imuRunning = false;
         Serial.println("IMU stopped.");
     } else {
         Serial.println("IMU not running.");
@@ -105,12 +106,12 @@ void SensorManager::sendPacket(camera_fb_t *frame) {
         }
         
         header.batteryMv = readBatteryMv();
-        uint8_t imuCount = imu.getSampleCount();
+        uint8_t imuCount = imu->getSampleCount();
         IMUSample imuBuffer[imuCount];
-        imuCount = imu.getSamples(imuBuffer, imuCount); // Get the actual number of samples copied
+        imuCount = imu->getSamples(imuBuffer, imuCount); // Get the actual number of samples copied
         header.imuCount = imuCount;
 
-        Network::encodeStruct(header);
+        Network::writeStruct(header);
         Network::writePayloadChunk((uint8_t*)imuBuffer, imuCount * sizeof(IMUSample));
         if (frame) {
             //Network::writePayloadChunk(frame->buf, frame->len);
@@ -134,12 +135,12 @@ void SensorManager::processSensorData() {
             sendPacket(frame);
             //xSemaphoreGive(camera.getFrameHandledSemaphore());
         }
-    } else if (imu.getSampleCount() >= MAX_IMU_SAMPLES/2) {
+    } else if (imu->getSampleCount() >= MAX_IMU_SAMPLES/2) {
         sendPacket(nullptr);
     }
 }
 
-IMU& SensorManager::getIMU() {
+IMU* SensorManager::getIMU() {
     return instance.imu;
 }
 

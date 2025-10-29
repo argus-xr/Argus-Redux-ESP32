@@ -2,15 +2,17 @@
 #include <Wire.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#include <algorithm>
+#include "network.h"
 
-IMU::IMU() : imuQueue(nullptr), imuTaskHandle(nullptr), isRunning(false) {
-
+IMU::IMU(uint8_t id) : mutex(nullptr), imuTaskHandle(nullptr), isRunning(false), sensorID(id), sampleCount(0) {
+    mutex = xSemaphoreCreateMutex();
 }
 
 IMU::~IMU() {
-    stop(); // Ensure the task is stopped before deleting the queue
-    if (imuQueue) {
-        vQueueDelete(imuQueue);
+    stop();
+    if (mutex) {
+        vSemaphoreDelete(mutex);
     }
 }
 
@@ -21,16 +23,10 @@ void IMU::init() {
             Serial.println("MPU6050 connection failed");
         } else {
             Serial.println("MPU6050 connected");
-            imu.setSleepEnabled(false); // Prevent sleeping.
+            imu.setSleepEnabled(false); // Prevent sleeping
         }
     } else {
         Serial.println("Wire.begin() failed");
-    }
-    if (!imuQueue) {
-        imuQueue = xQueueCreate(MAX_IMU_SAMPLES, sizeof(IMUSample));
-        if (imuQueue == NULL) {
-            Serial.println("Error creating IMU queue");
-        }
     }
 }
 
@@ -75,23 +71,46 @@ void IMU::bufferIMUSample() {
     sample.gyro[1] = gy;
     sample.gyro[2] = gz;
 
-    if (xQueueSend(imuQueue, &sample, 0) != pdTRUE) {
-        Serial.println("IMU Queue full, dropping sample");
+    if (xSemaphoreTake(mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+        if (sampleCount < MAX_IMU_SAMPLES) {
+            imuBuffer[sampleCount++] = sample;
+        } else {
+            Serial.println("IMU buffer full, dropping sample");
+        }
+        xSemaphoreGive(mutex);
+    } else {
+        Serial.println("Failed to acquire mutex for IMU buffer");
     }
 }
 
 uint8_t IMU::getSamples(IMUSample* buffer, uint8_t requestedCount) {
     uint8_t count = 0;
-    IMUSample sample;
-    while (count < requestedCount && xQueueReceive(imuQueue, &sample, 0) == pdTRUE) {
-        buffer[count++] = sample;
+    
+    if (xSemaphoreTake(mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+        count = (requestedCount < sampleCount) ? requestedCount : sampleCount;
+        if (count > 0) {
+            // Copy samples to the output buffer
+            memcpy(buffer, imuBuffer, count * sizeof(IMUSample));
+            
+            // Shift remaining samples to the start of the buffer
+            if (count < sampleCount) {
+                memmove(imuBuffer, imuBuffer + count, (sampleCount - count) * sizeof(IMUSample));
+            }
+            sampleCount -= count;
+        }
+        xSemaphoreGive(mutex);
     }
-    return count; // Return the actual number of samples copied
+    
+    return count;
 }
 
 uint8_t IMU::getSampleCount() {
-    UBaseType_t count = uxQueueMessagesWaiting(imuQueue);
-    return (uint8_t)count;
+    uint8_t count = 0;
+    if (xSemaphoreTake(mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+        count = sampleCount;
+        xSemaphoreGive(mutex);
+    }
+    return count;
 }
 
 void IMU::start() {
@@ -107,12 +126,55 @@ void IMU::stop() {
         vTaskDelete(imuTaskHandle);
         imuTaskHandle = nullptr;
     }
-    if (imuQueue) {
-        xQueueReset(imuQueue); // Clear the queue
+    if (xSemaphoreTake(mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+        sampleCount = 0;  // Clear the buffer
+        xSemaphoreGive(mutex);
     }
 }
 
-SensorData IMU::getSensorData() {
-    SensorData data;
-    return data;
+void IMU::writeSensorDataToPacket() {
+    if (!isRunning) {
+        return; // Don't try to write data if we're stopped/stopping
+    }
+
+    uint8_t count;
+    if (xSemaphoreTake(mutex, pdMS_TO_TICKS(10)) != pdTRUE) {
+        return;
+    }
+    count = sampleCount;
+    
+    if (count == 0) {
+        xSemaphoreGive(mutex);
+        return; // No data to send
+    }
+
+    // Calculate payload size
+    size_t payloadSize = sizeof(IMUHeader) + count * sizeof(IMUSample);
+
+    // Start the network message
+    if (!Network::startMessageToHost(Network::MessageType::SENSOR_DATA)) {
+        Serial.printf("WARN: IMU (%u) Failed to start network message.\n", sensorID);
+        xSemaphoreGive(mutex);
+        return;
+    }
+
+    // Write packet header: SensorID, PayloadLength
+    Network::writeInt<uint8_t>(sensorID);
+    Network::writeInt<uint16_t>((uint16_t)payloadSize);
+
+    // Write payload part 1: IMUHeader
+    IMUHeader imuHeader;
+    imuHeader.sampleCount = count;
+    Network::writeStruct(imuHeader);
+
+    // Write payload part 2: Samples
+    Network::writePayloadChunk((uint8_t*)imuBuffer, count * sizeof(IMUSample));
+    
+    // Clear the buffer after sending
+    sampleCount = 0;
+    xSemaphoreGive(mutex);
+
+    // Finalize and send the message (includes CRC)
+    Network::endMessage();
+    Serial.printf("INFO: IMU (%u) Sent packet with %u samples.\n", sensorID, count);
 }
