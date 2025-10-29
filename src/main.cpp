@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include <esp_timer.h>
+#include "soc/rtc_cntl_reg.h"
 #include <soc/rtc.h>
 #include <esp_heap_caps.h>
 #include "main.h"
