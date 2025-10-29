@@ -3,7 +3,6 @@
 #include "sensors/camera.h"
 #include "config.h"
 
-#define CAMERA_MODEL_ESP32S3_EYE
 #include "camera_pins.h" // load up ESP32-Cam pins, but allow switching to other models easily if needed.
 
 CameraClass::CameraClass() {
