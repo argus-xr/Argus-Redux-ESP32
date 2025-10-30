@@ -2,5 +2,11 @@
     "files.associations": {
         "atomic": "cpp",
         "cstdint": "cpp"
+    },
+    "files.exclude": {
+        "**/*.rpyc": true,
+        "**/*.rpa": true,
+        "**/*.rpymc": true,
+        "**/cache/": true
     }
 }

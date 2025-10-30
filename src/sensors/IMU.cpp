@@ -15,7 +15,7 @@ IMU::~IMU() {
 }
 
 void IMU::init() {
-    if (Wire.begin(GPIO_NUM_15, GPIO_NUM_13)) {
+    if (Wire.begin(GPIO_NUM_47, GPIO_NUM_21)) {
         imu.initialize();
         if (!imu.testConnection()) {
             Serial.println("MPU6050 connection failed");
