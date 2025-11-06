@@ -14,6 +14,7 @@
 
 void setup() {
     WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); // disable brownout detector
+    psramInit();
     vTaskDelay(pdMS_TO_TICKS(4000)); // allow time for serial output before boot stuff
 
     Serial.begin(115200);
@@ -21,12 +22,12 @@ void setup() {
 
     Network::startNetworkTasks();
 
-    SensorManager::instance.init();
+    //SensorManager::instance.init();
 
     Serial.println("Main: Setup complete.");
     Serial.printf("Free heap: %u", esp_get_free_heap_size());
 }
 
 void loop() {
-    SensorManager::instance.processSensorData();
+    //SensorManager::instance.processSensorData();
 }

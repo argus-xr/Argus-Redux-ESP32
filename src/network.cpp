@@ -233,10 +233,13 @@ namespace Network {
 
     void connectWiFiTask(void* pvParams) {
         Serial.println("Connecting to WiFi...");
-        WiFi.mode(WIFI_STA);
+        //WiFi.mode(WIFI_STA);
         vTaskDelay(pdMS_TO_TICKS(1000));
         WiFiManager wm;
-        wm.setConfigPortalTimeout(180);
+        wm.resetSettings();
+        wm.setDebugOutput(true, WM_DEBUG_DEV); // Web server doesn't start on ESP32-S3-CAM with debug set to notify or lower.
+        wm.setCountry("NL");
+        //wm.setConfigPortalTimeout(180);
         if (!wm.autoConnect("ArgusSetup")) {
             vTaskDelay(pdMS_TO_TICKS(3000));
             ESP.restart();
