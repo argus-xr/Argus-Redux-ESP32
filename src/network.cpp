@@ -236,7 +236,6 @@ namespace Network {
         //WiFi.mode(WIFI_STA);
         vTaskDelay(pdMS_TO_TICKS(1000));
         WiFiManager wm;
-        wm.resetSettings();
         wm.setDebugOutput(true, WM_DEBUG_DEV); // Web server doesn't start on ESP32-S3-CAM with debug set to notify or lower.
         wm.setCountry("NL");
         //wm.setConfigPortalTimeout(180);

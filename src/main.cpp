@@ -22,12 +22,12 @@ void setup() {
 
     Network::startNetworkTasks();
 
-    //SensorManager::instance.init();
+    SensorManager::instance.init();
 
     Serial.println("Main: Setup complete.");
     Serial.printf("Free heap: %u", esp_get_free_heap_size());
 }
 
 void loop() {
-    //SensorManager::instance.processSensorData();
+    SensorManager::instance.processSensorData();
 }

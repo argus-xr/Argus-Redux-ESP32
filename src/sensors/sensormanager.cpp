@@ -90,6 +90,7 @@ void SensorManager::sendPacket(camera_fb_t *frame) {
         }
         return;
     }
+    Serial.println("SensorManager: Sending sensor packet...");
 
     if (Network::startMessageToHost(Network::MessageType::SENSOR_DATA)) {
         PacketHeader header;
@@ -104,7 +105,7 @@ void SensorManager::sendPacket(camera_fb_t *frame) {
             header.imageSize = 0;
         }
         
-        header.batteryMv = readBatteryMv();
+        header.batteryMv = 3700; // readBatteryMv();
         uint8_t imuCount = imu.getSampleCount();
         IMUSample imuBuffer[imuCount];
         imuCount = imu.getSamples(imuBuffer, imuCount); // Get the actual number of samples copied
@@ -113,7 +114,7 @@ void SensorManager::sendPacket(camera_fb_t *frame) {
         Network::encodeStruct(header);
         Network::writePayloadChunk((uint8_t*)imuBuffer, imuCount * sizeof(IMUSample));
         if (frame) {
-            //Network::writePayloadChunk(frame->buf, frame->len);
+            Network::writePayloadChunk(frame->buf, frame->len);
         }
         Network::endMessage();
     }
@@ -126,6 +127,7 @@ void SensorManager::sendPacket(camera_fb_t *frame) {
 
 void SensorManager::processSensorData() {
     if (xSemaphoreTake(camera.getFrameReadySemaphore(), 0) == pdTRUE) { // Check if a frame is ready without blocking
+        Serial.println("SensorManager: Frame ready or cancelled.");
         camera_fb_t *frame = camera.getCapturedFrame();
         if (!frame) {
             Serial.println("SensorManager: No frame captured.");
