@@ -10,7 +10,7 @@ CameraClass::CameraClass() {
     frameTimestampStart = 0;
     frameTimestampEnd = 0;
     cameraTimeoutCount = 0;
-    currentFrameSize = FRAMESIZE_QVGA;
+    currentFrameSize = FRAMESIZE_HD;
     frameReady = xSemaphoreCreateBinary();
     frameHandled = xSemaphoreCreateBinary();
     cameraTaskHandle = nullptr;
@@ -122,6 +122,7 @@ void CameraClass::cameraTask() {
                 cameraTimeoutCount = 0;
                 xSemaphoreGive(frameReady); // Signal that a frame (or timeout) is ready
                 Serial.println("Waiting for frame to be handled");
+                vTaskDelay(pdMS_TO_TICKS(10));
                 xSemaphoreTake(frameHandled, portMAX_DELAY); // Wait until it's handled before we start on the next one
                 Serial.println("Frame handled");
             }

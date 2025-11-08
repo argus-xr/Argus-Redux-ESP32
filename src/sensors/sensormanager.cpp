@@ -92,12 +92,15 @@ void SensorManager::sendPacket(camera_fb_t *frame) {
     }
     Serial.println("SensorManager: Sending sensor packet...");
 
+    uint fakeLength = 1000;
+
     if (Network::startMessageToHost(Network::MessageType::SENSOR_DATA)) {
         PacketHeader header;
         if (frame) {
             header.cameraTimestampStart = camera.getFrameTimestampStart();
             header.cameraTimestampEnd = camera.getFrameTimestampEnd();
-            header.imageSize = frame->len;
+            header.imageSize = fakeLength;//frame->len;
+            Serial.printf("SensorManager: Including camera data in packet, size: %u.\n", frame->len);
         }
         else {
             header.cameraTimestampStart = 0;
@@ -114,8 +117,12 @@ void SensorManager::sendPacket(camera_fb_t *frame) {
         Network::encodeStruct(header);
         Network::writePayloadChunk((uint8_t*)imuBuffer, imuCount * sizeof(IMUSample));
         if (frame) {
-            Network::writePayloadChunk(frame->buf, frame->len);
+            uint8_t* fakeData = (uint8_t*)malloc(fakeLength);
+            memset(fakeData, 0xAA, fakeLength); // Fill with dummy data
+            Network::writePayloadChunk(fakeData, fakeLength);
+            //Network::writePayloadChunk(frame->buf, frame->len);
         }
+        Serial.println("Ending message");
         Network::endMessage();
     }
 
@@ -134,7 +141,7 @@ void SensorManager::processSensorData() {
             xSemaphoreGive(camera.getFrameHandledSemaphore());
         } else {
             sendPacket(frame);
-            //xSemaphoreGive(camera.getFrameHandledSemaphore());
+            //xSemaphoreGive(camera.getFrameHandledSemaphore()); // Moved to sendPacket for error-handling purposes.
         }
     } else if (imu.getSampleCount() >= MAX_IMU_SAMPLES/2) {
         sendPacket(nullptr);
