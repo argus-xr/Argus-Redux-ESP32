@@ -6,12 +6,21 @@
 #include "config.h"
 
 // Packet header structure
-struct __attribute__((packed)) PacketHeader {
+struct __attribute__((packed)) SensorDataMessageHeader {
+    uint32_t frameId;
     uint32_t cameraTimestampStart;
     uint32_t cameraTimestampEnd;
     uint16_t batteryMv;
     uint8_t imuCount;
     uint32_t imageSize;
+};
+
+// Image chunk message structure
+// The actual chunk data will follow this struct in the UDP packet
+struct __attribute__((packed)) ImageChunkMessageHeader {
+    uint32_t frameId;
+    uint32_t startByte;
+    uint32_t length;
 };
 
 class SensorManager {
@@ -39,6 +48,8 @@ private:
     bool imuRunning;
     bool cameraRunning;
     uint16_t readBatteryMv();
+    void sendImageChunks(camera_fb_t *frame);
+    uint32_t frameIdCounter;
 };
 
 #endif // SENSOR_MANAGER_H

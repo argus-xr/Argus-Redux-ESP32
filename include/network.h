@@ -21,6 +21,7 @@ namespace Network {
         HEARTBEAT		= 0x03,
         SETUP_CONFIG    = 0x04,
         SENSOR_DATA     = 0x05,
+        IMAGE_CHUNK     = 0x06,
     };
 
     extern std::atomic<bool> isHostDiscovered; // Make it atomic

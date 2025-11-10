@@ -16,7 +16,7 @@ public:
     void init();
     void start();
     void stop();
-    SensorData getSensorData();
+    //SensorData getSensorData();
     void setFrameSize(framesize_t frameSize);
     framesize_t getFrameSize();
 

@@ -180,7 +180,7 @@ SemaphoreHandle_t CameraClass::getFrameHandledSemaphore() const {
     return frameHandled;
 }
 
-SensorData CameraClass::getSensorData() {
+/*SensorData CameraClass::getSensorData() {
     SensorData data;
     return data;
-}
+}*/

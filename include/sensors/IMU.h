@@ -27,7 +27,7 @@ public:
     QueueHandle_t imuQueue;
     void start();
     void stop();
-    SensorData getSensorData();
+    //SensorData getSensorData();
 
 private:
     MPU6050 imu;

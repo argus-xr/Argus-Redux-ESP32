@@ -6,7 +6,7 @@
 // Define the static instance
 SensorManager SensorManager::instance;
 
-SensorManager::SensorManager() : imuRunning(false), cameraRunning(false) {
+SensorManager::SensorManager() : imuRunning(false), cameraRunning(false), frameIdCounter(0) {
 }
 
 SensorManager::~SensorManager() {
@@ -92,14 +92,13 @@ void SensorManager::sendPacket(camera_fb_t *frame) {
     }
     Serial.println("SensorManager: Sending sensor packet...");
 
-    uint fakeLength = 1000;
-
     if (Network::startMessageToHost(Network::MessageType::SENSOR_DATA)) {
-        PacketHeader header;
+        SensorDataMessageHeader header;
+        header.frameId = frame ? frameIdCounter : 0;
         if (frame) {
             header.cameraTimestampStart = camera.getFrameTimestampStart();
             header.cameraTimestampEnd = camera.getFrameTimestampEnd();
-            header.imageSize = fakeLength;//frame->len;
+            header.imageSize = frame->len;
             Serial.printf("SensorManager: Including camera data in packet, size: %u.\n", frame->len);
         }
         else {
@@ -116,19 +115,47 @@ void SensorManager::sendPacket(camera_fb_t *frame) {
 
         Network::encodeStruct(header);
         Network::writePayloadChunk((uint8_t*)imuBuffer, imuCount * sizeof(IMUSample));
-        if (frame) {
-            uint8_t* fakeData = (uint8_t*)malloc(fakeLength);
-            memset(fakeData, 0xAA, fakeLength); // Fill with dummy data
-            Network::writePayloadChunk(fakeData, fakeLength);
-            //Network::writePayloadChunk(frame->buf, frame->len);
-        }
         Serial.println("Ending message");
         Network::endMessage();
     }
 
     if (frame) {
+        sendImageChunks(frame);
         Serial.println("Returning framebuffer");
         xSemaphoreGive(camera.getFrameHandledSemaphore()); // Signal that the frame has been handled
+    }
+}
+
+void SensorManager::sendImageChunks(camera_fb_t *frame) {
+    if (!frame || !frame->buf) {
+        return;
+    }
+    Serial.println("SensorManager: Sending image chunk...");
+    
+    frameIdCounter++; // Can't start at 0, as that's reserved for no-frame packets
+
+    const size_t maxChunkSize = Network::MAX_UDP_PACKET_SIZE - 20; // Max size of image data per packet
+    size_t offset = 0;
+
+    while (offset < frame->len) {
+        size_t chunkSize = frame->len - offset;
+        if (chunkSize > maxChunkSize) {
+            chunkSize = maxChunkSize;
+        }
+
+        if (Network::startMessageToHost(Network::MessageType::IMAGE_CHUNK)) {
+            ImageChunkMessageHeader chunkHeader;
+            chunkHeader.frameId = frameIdCounter;
+            chunkHeader.startByte = offset;
+            chunkHeader.length = chunkSize;
+
+            Network::encodeStruct(chunkHeader);
+            Network::writePayloadChunk(frame->buf + offset, chunkSize);
+            Network::endMessage();
+            vTaskDelay(pdMS_TO_TICKS(10));
+        }
+
+        offset += chunkSize;
     }
 }
 
