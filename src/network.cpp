@@ -241,7 +241,10 @@ namespace Network {
         Serial.println("Connecting to WiFi...");
         //WiFi.mode(WIFI_STA);
         vTaskDelay(pdMS_TO_TICKS(1000));
+
         WiFi.setTxPower(WIFI_POWER_19_5dBm); // Max power
+        esp_wifi_set_ps(WIFI_PS_NONE); // Disable power save mode, to reduce jitter
+
         WiFiManager wm;
         wm.setDebugOutput(true, WM_DEBUG_DEV); // Web server doesn't start on ESP32-S3-CAM with debug set to notify or lower.
         wm.setCountry("NL");
