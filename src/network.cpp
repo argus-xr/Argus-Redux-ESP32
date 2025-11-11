@@ -1,6 +1,5 @@
 #include <Arduino.h>
 #include <WiFi.h>
-#include <WiFiUdp.h>
 #include <WiFiManager.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -19,22 +18,26 @@ namespace Network {
     const unsigned long HOST_TIMEOUT_MS = 10000;
     const unsigned long HEARTBEAT_INTERVAL_MS = 2000;
     const unsigned long DISCOVERY_INTERVAL_MS = 1000;
-    const int MAX_UDP_PACKET_SIZE = 1024;
+    const int MAX_UDP_PACKET_SIZE = 1460; // Max UDP packet size for AsyncUDP
     const uint8_t MAX_CRC_ERRORS = 10;
 
-    WiFiUDP udp;
+    AsyncUDP asyncUdp;
     IPAddress hostIP;
     std::atomic<bool> isHostDiscovered{false}; // Initialize as atomic and false
 
     static unsigned long lastHostPacketTime = 0;
     static unsigned long lastHeartbeatTime = 0;
-    //static unsigned long lastDiscoveryTime = 0; // Removed
 
     static bool messageInProgress = false;
     static uint8_t messageCrc = 0;
     static SemaphoreHandle_t udpMutex = nullptr;
     static IPAddress broadcastIP;
+    static IPAddress destinationIP;
     static uint32_t checksumErrorCount = 0;
+
+    // --- Message Buffer ---
+    static uint8_t messageBuffer[MAX_UDP_PACKET_SIZE];
+    static size_t messageLength = 0;
 
     // --- Decoding Buffer ---
     const uint8_t* decodeBuffer = nullptr;
@@ -67,14 +70,14 @@ namespace Network {
 
         messageInProgress = true;
         
-        if (!udp.beginPacket(ip, UDP_PORT)) {
-            if (udpMutex) xSemaphoreGive(udpMutex);
-            Serial.println("❌ Failed to start UDP packet");
-            logMemoryHealth();
-        }
+        destinationIP = ip;
+        messageLength = 0;
 
         messageCrc = 0; // Reset checksum
-        encodeInt<uint8_t>(static_cast<uint8_t>(type)); // Encode the message type as a VarInt and update the checksum
+        
+        // Encode the message type and update the checksum
+        uint8_t typeByte = static_cast<uint8_t>(type);
+        writePayloadChunk(&typeByte, sizeof(typeByte));
         return true;
     }
 
@@ -89,25 +92,27 @@ namespace Network {
 
     void writePayloadChunk(const uint8_t* data, size_t length) {
         if (!messageInProgress) return;
-        for (size_t i = 0; i < length; i++) {
-            udp.write(&data[i], 1);
-            updateCrc(data[i]);
+        if (messageLength + length > MAX_UDP_PACKET_SIZE) {
+            Serial.println("❌ Message buffer overflow!");
+            return;
         }
+        memcpy(&messageBuffer[messageLength], data, length);
+        messageLength += length;
     }
 
     void endMessage() {
         if (!messageInProgress) return;
-        udp.write(&messageCrc, 1);
-        vTaskDelay(pdMS_TO_TICKS(10));
-        int attempts = 0;
-        while((!udp.endPacket()) && attempts < 5) {
-            attempts++;
-            vTaskDelay(pdMS_TO_TICKS(3));
-        }
-        if (attempts == 5) {
-            logMemoryHealth();
-        }
 
+        for (size_t i = 0; i < messageLength; ++i) {
+            updateCrc(messageBuffer[i]);
+        }
+        messageBuffer[messageLength++] = messageCrc;
+
+
+        while(asyncUdp.writeTo(messageBuffer, messageLength, destinationIP, UDP_PORT) <= 0) {
+            vTaskDelay(pdMS_TO_TICKS(10)); // Wait and retry
+        }
+        
         messageInProgress = false;
         if (udpMutex) xSemaphoreGive(udpMutex);
     }
@@ -176,64 +181,57 @@ namespace Network {
         }
     }
 
-    void udpListenerTask(void* pvParams) {
-        while (true) {
-            int len = udp.parsePacket();
-            if (len > 0) {
-                Serial.println("📦 Packet received");
-                uint8_t packet[MAX_UDP_PACKET_SIZE];
-                int n = udp.read(packet, sizeof(packet));
-                if (n < 2) continue;
-
-                uint8_t receivedChecksum = packet[n - 1];
-                uint8_t calculatedChecksum = calculateChecksum(packet, n - 1);
-                if (calculatedChecksum != receivedChecksum) {
-                    Serial.println("❌ Checksum fail");
-                    checksumErrorCount++;
-                    if (checksumErrorCount > MAX_CRC_ERRORS) {
-                        Serial.println("Too many checksum errors, resetting connection.");
-                        isHostDiscovered = false;
-                        checksumErrorCount = 0;
-                    }
-                    continue;
-                } else {
+    void readPacket(AsyncUDPPacket packet) {
+        
+        int len = packet.length();
+        if (len >= 2) { // A valid message requires at least type + checksum
+            Serial.println("📦 Packet received");
+            uint8_t receivedChecksum = packet.data()[len - 1];
+            uint8_t calculatedChecksum = calculateChecksum(packet.data(), len - 1);
+            if (calculatedChecksum != receivedChecksum) {
+                Serial.println("❌ Checksum fail");
+                checksumErrorCount++;
+                if (checksumErrorCount > MAX_CRC_ERRORS) {
+                    Serial.println("Too many checksum errors, resetting connection.");
+                    isHostDiscovered = false;
                     checksumErrorCount = 0;
                 }
-
-                uint32_t typeRaw = 0;
-                decodeBuffer = packet;
-                decodeBufferSize = n - 1; // Exclude checksum byte
-                decodeIndex = 0;
-                if (!decodeVarInt(typeRaw)) continue;
-                
-                MessageType type = static_cast<MessageType>(typeRaw);
-
-                size_t payloadLen = decodeBufferSize - decodeIndex;
-                uint8_t* payload = (payloadLen > 0) ? (uint8_t*)malloc(payloadLen) : nullptr;
-
-                if (payload) {
-                    memcpy(payload, decodeBuffer + decodeIndex, payloadLen);
-                }
-
-                lastHostPacketTime = millis();
-                handleMessage(type, payload, payloadLen, udp.remoteIP());
-                if (payload) free(payload);
+                return;
+            } else {
+                checksumErrorCount = 0;
             }
 
-            if (isHostDiscovered && millis() - lastHostPacketTime > HOST_TIMEOUT_MS) {
-                Serial.println("⚠️ Host timeout — rediscovering");
-                isHostDiscovered = false; // Atomic write
-                SensorManager::instance.stopSensors(); // Stop sensors when host is lost
+            uint32_t typeRaw = 0;
+            decodeBuffer = packet.data();
+            decodeBufferSize = len - 1; // Exclude checksum byte
+            decodeIndex = 0;
+            if (!decodeVarInt(typeRaw)) return;
+            
+            MessageType type = static_cast<MessageType>(typeRaw);
+
+            size_t payloadLen = decodeBufferSize - decodeIndex;
+            uint8_t* payload = (payloadLen > 0) ? (uint8_t*)malloc(payloadLen) : nullptr;
+
+            if (payload) {
+                memcpy(payload, decodeBuffer + decodeIndex, payloadLen);
             }
 
-            if (isHostDiscovered && millis() - lastHeartbeatTime > HEARTBEAT_INTERVAL_MS) {
-                if (startMessageToHost(MessageType::HEARTBEAT)) {
-                    endMessage();
-                }
-                lastHeartbeatTime = millis();
-            }
+            lastHostPacketTime = millis();
+            handleMessage(type, payload, payloadLen, packet.remoteIP());
+            if (payload) free(payload);
+        }
 
-            vTaskDelay(pdMS_TO_TICKS(20));
+        if (isHostDiscovered && millis() - lastHostPacketTime > HOST_TIMEOUT_MS) {
+            Serial.println("⚠️ Host timeout — rediscovering");
+            isHostDiscovered = false; // Atomic write
+            SensorManager::instance.stopSensors(); // Stop sensors when host is lost
+        }
+
+        if (isHostDiscovered && millis() - lastHeartbeatTime > HEARTBEAT_INTERVAL_MS) {
+            if (startMessageToHost(MessageType::HEARTBEAT)) {
+                endMessage();
+            }
+            lastHeartbeatTime = millis();
         }
     }
 
@@ -255,7 +253,10 @@ namespace Network {
         }
         Serial.println("✅ WiFi connected");
 
-        udp.begin(UDP_PORT);
+        if (asyncUdp.listen(UDP_PORT)) {
+            Serial.println("Started UDP listener");
+            asyncUdp.onPacket(readPacket);
+        }
         Serial.println("Started UDP");
 
         broadcastIP = ~WiFi.subnetMask() | WiFi.gatewayIP();
@@ -265,7 +266,6 @@ namespace Network {
         Serial.println("UDP mutex created");
 
         xTaskCreatePinnedToCore(hostDiscoveryTask, "HostDiscovery", 4096, nullptr, 1, nullptr, 1);
-        xTaskCreatePinnedToCore(udpListenerTask, "UDPListener", 4096, nullptr, 1, nullptr, 1);
         xTaskCreatePinnedToCore(wifiMonitorTask, "WiFiMonitor", 2048, nullptr, 1, nullptr, 1);
         Serial.println("Tasks created");
 

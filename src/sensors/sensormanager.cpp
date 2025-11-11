@@ -152,7 +152,6 @@ void SensorManager::sendImageChunks(camera_fb_t *frame) {
             Network::encodeStruct(chunkHeader);
             Network::writePayloadChunk(frame->buf + offset, chunkSize);
             Network::endMessage();
-            vTaskDelay(pdMS_TO_TICKS(10));
         }
 
         offset += chunkSize;

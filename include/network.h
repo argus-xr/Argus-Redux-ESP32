@@ -1,6 +1,6 @@
 #pragma once
 #include <Arduino.h>
-#include <WiFiUdp.h>
+#include <AsyncUDP.h>
 #include <atomic> // Include for atomic types
 
 namespace Network {
@@ -27,6 +27,7 @@ namespace Network {
     extern std::atomic<bool> isHostDiscovered; // Make it atomic
     extern IPAddress hostIP;
 
+    void readPacket(AsyncUDPPacket packet);
     void startNetworkTasks();
 
     bool startMessage(IPAddress ip, MessageType type); // Returns true when we have a valid connection and can write a message.
