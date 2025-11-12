@@ -6,7 +6,7 @@
 // Define the static instance
 SensorManager SensorManager::instance;
 
-SensorManager::SensorManager() : imuRunning(false), cameraRunning(false), frameIdCounter(0) {
+SensorManager::SensorManager() : imuRunning(false), cameraRunning(false), frameIdCounter(1) {
 }
 
 SensorManager::~SensorManager() {
@@ -121,6 +121,8 @@ void SensorManager::sendPacket(camera_fb_t *frame) {
 
     if (frame) {
         sendImageChunks(frame);
+    
+        frameIdCounter++;
         Serial.println("Returning framebuffer");
         xSemaphoreGive(camera.getFrameHandledSemaphore()); // Signal that the frame has been handled
     }
@@ -131,8 +133,6 @@ void SensorManager::sendImageChunks(camera_fb_t *frame) {
         return;
     }
     Serial.println("SensorManager: Sending image chunk...");
-    
-    frameIdCounter++; // Can't start at 0, as that's reserved for no-frame packets
 
     const size_t maxChunkSize = Network::MAX_UDP_PACKET_SIZE - 20; // Max size of image data per packet
     size_t offset = 0;
