@@ -15,7 +15,7 @@ namespace Network {
     const int UDP_PORT = 4210;
     const char* DISCOVERY_MSG = "ARGUS_DISCOVERY";
     const char* REPLY_MSG = "ARGUS_REPLY";
-    const unsigned long HOST_TIMEOUT_MS = 10000;
+    const unsigned long HOST_TIMEOUT_MS = 2000;
     const unsigned long HEARTBEAT_INTERVAL_MS = 2000;
     const unsigned long DISCOVERY_INTERVAL_MS = 1000;
     const int MAX_UDP_PACKET_SIZE = 1000; // Max UDP packet size for AsyncUDP
