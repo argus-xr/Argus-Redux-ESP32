@@ -122,7 +122,7 @@ void CameraClass::cameraTask() {
                 cameraTimeoutCount = 0;
                 xSemaphoreGive(frameReady); // Signal that a frame (or timeout) is ready
                 Serial.println("Waiting for frame to be handled");
-                vTaskDelay(pdMS_TO_TICKS(10));
+                vTaskDelay(pdMS_TO_TICKS(5));
                 xSemaphoreTake(frameHandled, portMAX_DELAY); // Wait until it's handled before we start on the next one
                 Serial.println("Frame handled");
             }

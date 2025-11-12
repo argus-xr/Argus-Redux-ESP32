@@ -18,7 +18,7 @@ namespace Network {
     const unsigned long HOST_TIMEOUT_MS = 10000;
     const unsigned long HEARTBEAT_INTERVAL_MS = 2000;
     const unsigned long DISCOVERY_INTERVAL_MS = 1000;
-    const int MAX_UDP_PACKET_SIZE = 1460; // Max UDP packet size for AsyncUDP
+    const int MAX_UDP_PACKET_SIZE = 1000; // Max UDP packet size for AsyncUDP
     const uint8_t MAX_CRC_ERRORS = 10;
 
     AsyncUDP asyncUdp;
