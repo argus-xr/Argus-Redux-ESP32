@@ -57,7 +57,7 @@ void CameraClass::init() {
     config.xclk_freq_hz = 20000000;
     config.pixel_format = PIXFORMAT_JPEG;
     config.frame_size = currentFrameSize;
-    config.jpeg_quality = 12;
+    config.jpeg_quality = 4; // Actually compression: lower is better image quality
     config.fb_count = 1;
     config.fb_location = CAMERA_FB_IN_PSRAM;
     config.grab_mode = CAMERA_GRAB_WHEN_EMPTY;
@@ -132,7 +132,7 @@ void CameraClass::cameraTask() {
                 capturedFrame = nullptr;
             }
         } else {
-            vTaskDelay(pdMS_TO_TICKS(100)); // Check every 100ms if we should start again
+            vTaskDelay(pdMS_TO_TICKS(10)); // Check every 100ms if we should start again
         }
     }
 }
