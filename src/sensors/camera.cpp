@@ -69,6 +69,7 @@ void CameraClass::init() {
     } else {
         Serial.println("Camera initialized!");
     }
+    frameTimestampStart = micros();
 }
 
 void CameraClass::start() {
@@ -106,7 +107,6 @@ void CameraClass::cameraTask() {
                 vTaskDelay(pdMS_TO_TICKS(10)); // Wait 10 ms
             }
             capturedFrame = fb;
-            frameTimestampStart = waitStart;
             frameTimestampEnd = micros();
             if (fb == nullptr) {
                 Serial.println("Camera timeout");
@@ -119,18 +119,42 @@ void CameraClass::cameraTask() {
                     cameraTimeoutCount = 0;
                 }
             } else {
-                cameraTimeoutCount = 0;
-                xSemaphoreGive(frameReady); // Signal that a frame (or timeout) is ready
-                Serial.println("Waiting for frame to be handled");
-                vTaskDelay(pdMS_TO_TICKS(5));
-                xSemaphoreTake(frameHandled, portMAX_DELAY); // Wait until it's handled before we start on the next one
-                Serial.println("Frame handled");
+                // A frame has been captured. We now deep copy it so we can return the original buffer to the driver.
+                waitingFrame = new camera_fb_t;
+                if (!waitingFrame) {
+                    Serial.println("FATAL: Failed to allocate memory for waitingFrame struct!");
+                } else {
+                    // Copy the metadata from the captured frame.
+                    memcpy(waitingFrame, capturedFrame, sizeof(camera_fb_t));
+
+                    // Allocate a new buffer for the image data.
+                    uint8_t* bufCopy = (uint8_t*)malloc(capturedFrame->len);
+                    if (bufCopy) {
+                        memcpy(bufCopy, capturedFrame->buf, capturedFrame->len);
+                        waitingFrame->buf = bufCopy; // Point our new frame to the new buffer
+                    } else {
+                        Serial.println("Error: Failed to allocate memory for frame buffer copy.");
+                        delete waitingFrame; // Clean up the struct we just allocated
+                        waitingFrame = nullptr;
+                    }
+
+                    // Return the original frame buffer to the camera driver
+                    Serial.println("Clearing framebuffer");
+                    esp_camera_fb_return(capturedFrame);
+                    capturedFrame = nullptr;
+
+                    frameTimestampStart = micros();
+
+                    cameraTimeoutCount = 0;
+
+                    xSemaphoreGive(frameReady);
+                    Serial.println("Waiting for frame to be handled");
+                    vTaskDelay(pdMS_TO_TICKS(5));
+                    xSemaphoreTake(frameHandled, portMAX_DELAY); // Wait until it's handled before we start on the next one
+                    Serial.println("Frame handled");
+                }
             }
-            if (capturedFrame) {
-                Serial.println("Clearing framebuffer");
-                esp_camera_fb_return(capturedFrame);
-                capturedFrame = nullptr;
-            }
+            cleanFrameBuffer();
         } else {
             vTaskDelay(pdMS_TO_TICKS(10)); // Check every 100ms if we should start again
         }
@@ -154,14 +178,15 @@ framesize_t CameraClass::getFrameSize() {
 }
 
 void CameraClass::cleanFrameBuffer() {
-    if (capturedFrame) {
-        esp_camera_fb_return(capturedFrame);
-        capturedFrame = nullptr;
+    if (waitingFrame) {
+        free(waitingFrame->buf);
+        delete waitingFrame;
+        waitingFrame = nullptr;
     }
 }
 
 camera_fb_t* CameraClass::getCapturedFrame() const {
-    return capturedFrame;
+    return waitingFrame;
 }
 
 uint32_t CameraClass::getFrameTimestampStart() const {

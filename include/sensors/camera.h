@@ -29,6 +29,7 @@ public:
 
 private:
     camera_fb_t* capturedFrame;
+    camera_fb_t* waitingFrame;
     uint32_t frameTimestampStart;
     uint32_t frameTimestampEnd;
     uint32_t cameraTimeoutCount;
